@@ -4,6 +4,7 @@ import { Car, Plus, Search, Edit, Trash2, Eye, Filter } from 'lucide-react';
 import Button from '../components/Button';
 import Table from '../components/Table';
 import SearchInput from '../components/SearchInput';
+import EditCarModal from '../components/EditCarModal';
 import { carsAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -15,6 +16,8 @@ const CarsCenter = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredCars, setFilteredCars] = useState([]);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedCarId, setSelectedCarId] = useState(null);
 
   // Load cars from database
   useEffect(() => {
@@ -136,7 +139,14 @@ const CarsCenter = () => {
   ];
 
   const handleEdit = (id) => {
-    console.log('Edit car:', id);
+    setSelectedCarId(id);
+    setShowEditModal(true);
+  };
+
+  const handleEditSave = () => {
+    loadCars(); // Refresh the cars list
+    setShowEditModal(false);
+    setSelectedCarId(null);
   };
 
   if (loading) {
@@ -185,6 +195,17 @@ const CarsCenter = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Car Modal */}
+      <EditCarModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setSelectedCarId(null);
+        }}
+        carId={selectedCarId}
+        onSave={handleEditSave}
+      />
 
       {/* Cars Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">

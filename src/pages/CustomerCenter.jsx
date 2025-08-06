@@ -4,6 +4,7 @@ import { UserCheck, Plus, Search, Edit, Trash2, Eye, Filter } from 'lucide-react
 import Button from '../components/Button';
 import Table from '../components/Table';
 import SearchInput from '../components/SearchInput';
+import EditCustomerModal from '../components/EditCustomerModal';
 import { customersAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -16,6 +17,8 @@ const CustomerCenter = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all');
   const [filteredCustomers, setFilteredCustomers] = useState([]);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
 
   // Load customers from database
   useEffect(() => {
@@ -28,17 +31,18 @@ const CustomerCenter = () => {
       const matchesSearch = customer.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            (customer.phoneNumber && customer.phoneNumber.includes(searchTerm));
       
-      let matchesPaymentMethod = true;
+      let matchesType = true;
       if (paymentMethodFilter === 'cash') {
-        matchesPaymentMethod = (customer.balance || 0) === 0;
+        matchesType = (customer.balance || 0) === 0;
       } else if (paymentMethodFilter === 'credit') {
-        matchesPaymentMethod = (customer.balance || 0) > 0;
+        matchesType = (customer.balance || 0) > 0;
       }
       
-      return matchesSearch && matchesPaymentMethod;
+      return matchesSearch && matchesType;
     });
     setFilteredCustomers(filtered);
-  }, [searchTerm, paymentMethodFilter, customers]);
+  }
+  )
 
   const loadCustomers = async () => {
     try {
@@ -142,7 +146,14 @@ const CustomerCenter = () => {
   ];
 
   const handleEdit = (id) => {
-    console.log('Edit customer:', id);
+    setSelectedCustomerId(id);
+    setShowEditModal(true);
+  };
+
+  const handleEditSave = () => {
+    loadCustomers(); // Refresh the customers list
+    setShowEditModal(false);
+    setSelectedCustomerId(null);
   };
 
   if (loading) {
@@ -267,6 +278,17 @@ const CustomerCenter = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Customer Modal */}
+      <EditCustomerModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setSelectedCustomerId(null);
+        }}
+        customerId={selectedCustomerId}
+        onSave={handleEditSave}
+      />
 
 <Footer/>
 

@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Calendar, Printer, User, ChevronDown, ChevronRight, Eye, Edit, Filter } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Building2, Calendar, Printer, User, ChevronDown, ChevronRight, Eye, Edit, Filter, Trash2 } from 'lucide-react';
 import Button from '../components/Button';
-import { customersAPI, invoicesAPI } from '../services/api';
+import { customersAPI, invoicesAPI, paymentsAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
 
 const CustomerReports = () => {
-  const { showError } = useToast();
+  const { showError, showSuccess } = useToast();
+  const [searchParams] = useSearchParams();
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [dateRange, setDateRange] = useState({
     from: startOfMonth(new Date()),
@@ -17,6 +19,7 @@ const CustomerReports = () => {
   const [expandedItems, setExpandedItems] = useState({});
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState([]);
+  const [paymentsData, setPaymentsData] = useState([]);
   
   // Data from database
   const [customers, setCustomers] = useState([]);
@@ -24,12 +27,34 @@ const CustomerReports = () => {
   // Load data from database
   useEffect(() => {
     loadCustomers();
+    
+    // Check for URL parameters from Account Management
+    const customerId = searchParams.get('customerId');
+    const month = searchParams.get('month');
+    const customerName = searchParams.get('customerName');
+    
+    if (customerId) {
+      setSelectedCustomer(customerId);
+    }
+    
+    if (month) {
+      // Set date range based on month parameter
+      const [year, monthNum] = month.split('-');
+      const startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+      const endDate = new Date(parseInt(year), parseInt(monthNum), 0);
+      
+      setDateRange({
+        from: startDate,
+        to: endDate
+      });
+    }
   }, []);
 
   // Load report data when customer or date range changes
   useEffect(() => {
     if (selectedCustomer) {
       loadReportData();
+      loadPaymentsData();
     }
   }, [selectedCustomer, dateRange]);
 
@@ -120,6 +145,27 @@ const CustomerReports = () => {
     }
   };
 
+  const loadPaymentsData = async () => {
+    try {
+      // Load payments for selected customer
+      const response = await paymentsAPI.getAll();
+      const allPayments = response.data;
+      
+      // Filter payments by customer and date range
+      const customerPayments = allPayments.filter(payment => {
+        const customerMatch = payment.customerId?._id === selectedCustomer || payment.customerId === selectedCustomer;
+        const paymentDate = new Date(payment.paymentDate);
+        const dateMatch = paymentDate >= dateRange.from && paymentDate <= dateRange.to;
+        return customerMatch && dateMatch;
+      });
+      
+      setPaymentsData(customerPayments);
+      console.log('✅ Customer payments loaded:', customerPayments);
+    } catch (error) {
+      console.error('❌ Error loading payments data:', error);
+      setPaymentsData([]);
+    }
+  };
   const handlePrint = () => {
     window.print();
   };
@@ -150,6 +196,69 @@ const CustomerReports = () => {
   const handleEditInvoice = (invoiceNo) => {
     console.log('Edit invoice:', invoiceNo);
     alert(`Opening invoice ${invoiceNo} for editing`);
+  };
+
+  const handleDeletePayment = async (payment) => {
+    const confirmMessage = `🗑️ DELETE PAYMENT\n\n` +
+      `Payment Details:\n` +
+      `• Date: ${format(new Date(payment.paymentDate), 'MMM dd, yyyy')}\n` +
+      `• Type: ${payment.type === 'receive' ? 'Payment Received' : 'Credit Purchase'}\n` +
+      `• Amount: $${payment.amount.toLocaleString()}\n` +
+      `• Description: ${payment.description || 'No description'}\n` +
+      `• Invoice: ${payment.invoiceNo || 'N/A'}\n\n` +
+      `This will:\n` +
+      `• Delete the payment record permanently\n` +
+      `• Reverse the customer balance change: ${payment.type === 'receive' ? '+' : '-'}$${payment.amount.toLocaleString()}\n` +
+      `• This action cannot be undone!\n\n` +
+      `Are you sure you want to delete this payment?`;
+
+    if (window.confirm(confirmMessage)) {
+      try {
+        setLoading(true);
+        
+        // Delete payment from database
+        if (payment._id) {
+          await paymentsAPI.delete(payment._id);
+          console.log('✅ Payment deleted from database');
+        }
+        
+        // Reverse customer balance changes
+        const selectedCustomerData = customers.find(customer => customer._id === selectedCustomer);
+        if (selectedCustomerData) {
+          let newBalance = selectedCustomerData.balance || 0;
+          
+          if (payment.type === 'receive') {
+            // If it was a payment received, add back to customer balance (debt)
+            newBalance = newBalance + payment.amount;
+          } else {
+            // If it was a credit purchase, subtract from customer balance
+            newBalance = Math.max(0, newBalance - payment.amount);
+          }
+          
+          // Update customer balance
+          await customersAPI.update(selectedCustomer, { 
+            balance: newBalance
+          });
+          
+          console.log(`✅ Customer balance updated: $${newBalance}`);
+        }
+        
+        showSuccess(
+          'Payment Deleted', 
+          `Payment of $${payment.amount.toLocaleString()} has been deleted and customer balance has been updated!`
+        );
+        
+        // Reload data
+        loadReportData();
+        loadPaymentsData();
+        
+      } catch (error) {
+        console.error('❌ Error deleting payment:', error);
+        showError('Delete Failed', 'Failed to delete payment. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   const selectedCustomerName = customers.find(c => c._id === selectedCustomer)?.customerName || '';
@@ -200,6 +309,22 @@ const CustomerReports = () => {
             </div>
             
             <div className="flex items-center space-x-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Quick Filter</label>
+                <button
+                  onClick={() => {
+                    setDateRange({
+                      from: new Date('2020-01-01'),
+                      to: new Date('2030-12-31')
+                    });
+                    if (selectedCustomer) loadReportData();
+                  }}
+                  className="border border-gray-300 rounded-lg px-3 py-2 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
+                >
+                  All Dates
+                </button>
+              </div>
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">From</label>
                 <input
@@ -415,6 +540,116 @@ const CustomerReports = () => {
                 </div>
               </div>
             </div>
+
+            {/* Customer Payments Section */}
+            {paymentsData.length > 0 && (
+              <div className="mt-6 bg-white border border-gray-300 rounded-lg p-4 print:bg-white print:border-gray-400">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">Customer Payments History</h4>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full bg-white print:bg-white">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Date</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Type</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Invoice No</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Description</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Amount</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Balance Impact</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white print:hidden">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white print:bg-white">
+                      {paymentsData.map((payment, index) => (
+                        <tr key={index} className="border-b border-gray-100 bg-white print:bg-white">
+                          <td className="py-2 px-3 text-sm text-gray-600 bg-white print:bg-white">
+                            {format(new Date(payment.paymentDate), 'MMM dd, yyyy')}
+                          </td>
+                          <td className="py-2 px-3 text-sm bg-white print:bg-white">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              payment.type === 'receive' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {payment.type === 'receive' ? 'Payment Received' : 'Credit Purchase'}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-sm font-medium text-blue-600 bg-white print:bg-white">
+                            {payment.invoiceNo || 'N/A'}
+                          </td>
+                          <td className="py-2 px-3 text-sm text-gray-700 bg-white print:bg-white">
+                            {payment.description || 'No description'}
+                          </td>
+                          <td className="py-2 px-3 text-sm font-semibold bg-white print:bg-white">
+                            <span className={payment.type === 'receive' ? 'text-green-600' : 'text-blue-600'}>
+                              {payment.type === 'receive' ? '-' : '+'}${payment.amount.toLocaleString()}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-xs text-gray-600 bg-white print:bg-white">
+                            {payment.type === 'receive' 
+                              ? 'Reduced balance' 
+                              : 'Added to balance'
+                            }
+                          </td>
+                          <td className="py-2 px-3 text-sm print:hidden bg-white">
+                            <div className="flex items-center space-x-2">
+                              {payment.invoiceNo && (
+                                <>
+                                  <button
+                                    onClick={() => handleViewInvoice(payment.invoiceNo)}
+                                    className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                    title="View Invoice"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleEditInvoice(payment.invoiceNo)}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                                    title="Edit Invoice"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                              <button
+                                onClick={() => handleDeletePayment(payment)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Delete Payment"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Customer Payments Summary */}
+                <div className="mt-4 grid grid-cols-2 gap-4">
+                  <div className="text-center p-3 bg-green-50 rounded-lg">
+                    <p className="text-sm text-green-700">Total Payments Received</p>
+                    <p className="font-semibold text-green-600">
+                      ${paymentsData
+                        .filter(p => p.type === 'receive')
+                        .reduce((sum, p) => sum + p.amount, 0)
+                        .toLocaleString()}
+                    </p>
+                    <p className="text-xs text-green-600">Balance reduced</p>
+                  </div>
+                  <div className="text-center p-3 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-blue-700">Total Credit Purchases</p>
+                    <p className="font-semibold text-blue-600">
+                      ${paymentsData
+                        .filter(p => p.type === 'credit_purchase')
+                        .reduce((sum, p) => sum + p.amount, 0)
+                        .toLocaleString()}
+                    </p>
+                    <p className="text-xs text-blue-600">Balance increased</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

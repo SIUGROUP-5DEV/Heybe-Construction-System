@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Backend URL - Update this to your backend URL
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -12,7 +13,7 @@ const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('authToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -28,7 +29,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
+      localStorage.removeItem('authToken');
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -38,7 +39,6 @@ api.interceptors.response.use(
 // Auth API
 export const authAPI = {
   login: (credentials) => api.post('/auth/login', credentials),
-  register: (userData) => api.post('/auth/register', userData),
   verify: () => api.get('/auth/verify'),
 };
 
@@ -49,27 +49,6 @@ export const carsAPI = {
   getById: (id) => api.get(`/cars/${id}`),
   update: (id, carData) => api.put(`/cars/${id}`, carData),
   delete: (id) => api.delete(`/cars/${id}`),
-};
-
-// Employees API
-export const employeesAPI = {
-  getAll: () => api.get('/employees'),
-  create: (employeeData) => api.post('/employees', employeeData),
-  getById: (id) => api.get(`/employees/${id}`),
-  update: (id, employeeData) => api.put(`/employees/${id}`, employeeData),
-  delete: (id) => api.delete(`/employees/${id}`),
-  addBalance: (id, balanceData) => api.post(`/employees/${id}/add-balance`, balanceData),
-  deductBalance: (id, balanceData) => api.post(`/employees/${id}/deduct-balance`, balanceData),
-  getPaymentHistory: (id) => api.get(`/employees/${id}/payment-history`),
-};
-
-// Items API
-export const itemsAPI = {
-  getAll: () => api.get('/items'),
-  create: (itemData) => api.post('/items', itemData),
-  getById: (id) => api.get(`/items/${id}`),
-  update: (id, itemData) => api.put(`/items/${id}`, itemData),
-  delete: (id) => api.delete(`/items/${id}`),
 };
 
 // Customers API
@@ -94,12 +73,8 @@ export const invoicesAPI = {
 export const paymentsAPI = {
   receive: (paymentData) => api.post('/payments/receive', paymentData),
   paymentOut: (paymentData) => api.post('/payments/payment-out', paymentData),
-  update: (id, paymentData) => api.put(`/payments/${id}`, paymentData),
   getAll: () => api.get('/payments'),
-  delete: (id) => {
-    console.log('🗑️ Deleting payment with ID:', id);
-    return api.delete(`/payments/${id}`);
-  },
+  delete: (id) => api.delete(`/payments/${id}`),
 };
 
 // Dashboard API

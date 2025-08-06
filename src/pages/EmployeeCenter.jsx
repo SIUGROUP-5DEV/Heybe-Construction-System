@@ -4,6 +4,7 @@ import { Users, Plus, Search, Edit, Trash2, Eye, Filter } from 'lucide-react';
 import Button from '../components/Button';
 import Table from '../components/Table';
 import SearchInput from '../components/SearchInput';
+import EditEmployeeModal from '../components/EditEmployeeModal';
 import { employeesAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -16,6 +17,8 @@ const EmployeeCenter = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [filteredEmployees, setFilteredEmployees] = useState([]);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
 
   // Load employees from database
   useEffect(() => {
@@ -145,8 +148,14 @@ const EmployeeCenter = () => {
   ];
 
   const handleEdit = (id) => {
-    console.log('Edit employee:', id);
-    // TODO: Navigate to edit page or open edit modal
+    setSelectedEmployeeId(id);
+    setShowEditModal(true);
+  };
+
+  const handleEditSave = () => {
+    loadEmployees(); // Refresh the employees list
+    setShowEditModal(false);
+    setSelectedEmployeeId(null);
   };
 
   if (loading) {
@@ -251,6 +260,17 @@ const EmployeeCenter = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Employee Modal */}
+      <EditEmployeeModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setSelectedEmployeeId(null);
+        }}
+        employeeId={selectedEmployeeId}
+        onSave={handleEditSave}
+      />
 
 <Footer/>
 

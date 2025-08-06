@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, User, Phone, DollarSign, Calendar, Filter, Printer, Edit, Eye, CreditCard } from 'lucide-react';
+import { ArrowLeft, User, Phone, DollarSign, Calendar, Filter, Printer, Edit, Eye, CreditCard, FileText, Trash2, ArrowDownLeft, ArrowUpRight, X } from 'lucide-react';
 import Button from '../components/Button';
 import Table from '../components/Table';
 import DateFilter from '../components/DateFilter';
@@ -25,6 +25,15 @@ const CustomerProfile = () => {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [modalMode, setModalMode] = useState('view');
   const [showModal, setShowModal] = useState(false);
+  const [showViewPaymentModal, setShowViewPaymentModal] = useState(false);
+  const [showEditPaymentModal, setShowEditPaymentModal] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState(null);
+  const [editPaymentData, setEditPaymentData] = useState({
+    paymentNo: '',
+    paymentDate: '',
+    amount: '',
+    description: ''
+  });
   
   const [transactions, setTransactions] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -139,10 +148,92 @@ const CustomerProfile = () => {
     alert(`Filter applied for ${customer?.customerName} with ${filteredTransactions.length} transactions and ${filteredPayments.length} payments found`);
   };
 
+  const handleViewPayment = (payment) => {
+    setSelectedPayment(payment);
+    setShowViewPaymentModal(true);
+    
+    // Set edit payment data
+    setEditPaymentData({
+      paymentNo: payment.paymentNo || '',
+      paymentDate: payment.paymentDate ? new Date(payment.paymentDate).toISOString().split('T')[0] : '',
+      amount: payment.amount || '',
+      description: payment.description || ''
+    });
+  };
+  
+  const handleEditPayment = (payment) => {
+    setSelectedPayment(payment);
+    setEditPaymentData({
+      paymentNo: payment.paymentNo || '',
+      paymentDate: payment.paymentDate ? new Date(payment.paymentDate).toISOString().split('T')[0] : '',
+      amount: payment.amount || '',
+      description: payment.description || ''
+    });
+    setShowEditPaymentModal(true);
+  };
+
+  const handleEditPaymentChange = (e) => {
+    const { name, value } = e.target;
+    setEditPaymentData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleUpdatePayment = async (e) => {
+    e.preventDefault();
+    
+    if (!editPaymentData.amount || !editPaymentData.paymentDate) {
+      showError('Validation Error', 'Please fill in all required fields');
+      return;
+    }
+    
+    try {
+      // Update payment in database
+      const updatedPayment = {
+        ...selectedPayment,
+        paymentDate: editPaymentData.paymentDate,
+        amount: parseFloat(editPaymentData.amount),
+        description: editPaymentData.description
+      };
+      
+      // Call API to update payment
+      await paymentsAPI.update(selectedPayment._id, updatedPayment);
+      
+      showSuccess('Payment Updated', 'Payment has been updated successfully');
+      
+      // Close modal and refresh data
+      setShowEditPaymentModal(false);
+      loadPayments();
+      
+    } catch (error) {
+      console.error('❌ Error updating payment:', error);
+      showError('Update Failed', 'Failed to update payment. Please try again.');
+    }
+  };
+
+
   const handleViewInvoice = (invoiceNo) => {
     setSelectedInvoice(invoiceNo);
     setModalMode('view');
     setShowModal(true);
+  };
+
+  const handleDeletePayment = async (payment) => {
+    if (window.confirm(`Are you sure you want to delete this payment of $${payment.amount}?`)) {
+      try {
+        setLoading(true);
+        await paymentsAPI.delete(payment._id);
+        console.log('✅ Payment deleted:', payment._id);
+        showSuccess('Payment Deleted', `Payment of $${payment.amount} has been deleted successfully`);
+        loadPayments();
+      } catch (error) {
+        console.error('❌ Error deleting payment:', error);
+        showError('Delete Failed', error.response?.data?.error || 'Failed to delete payment. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   const handleEditInvoice = (invoiceNo) => {
@@ -246,7 +337,7 @@ const CustomerProfile = () => {
   const paymentColumns = [
     {
       header: 'Date',
-      accessor: 'paymentDate',
+      accessor: 'paymentDate', 
       render: (value) => format(new Date(value), 'MMM dd, yyyy')
     },
     {
@@ -259,6 +350,15 @@ const CustomerProfile = () => {
             : 'bg-red-100 text-red-800'
         }`}>
           {value === 'receive' ? 'Payment Received' : 'Payment Out'}
+        </span>
+      )
+    },
+    {
+      header: 'Payment No',
+      accessor: 'paymentNo',
+      render: (value) => (
+        <span className="font-mono text-blue-600 font-medium">
+          {value || payment.paymentNo || 'N/A'}
         </span>
       )
     },
@@ -296,6 +396,37 @@ const CustomerProfile = () => {
             ? 'Reduced balance' 
             : 'Added to balance'
           }
+        </div>
+      )
+    },
+    {
+      header: 'Actions',
+      accessor: '_id',
+      render: (value, row) => (
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => handleViewPayment(row)}
+            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="View Details"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+          {row.invoiceNo && (
+            <button
+              onClick={() => handleViewInvoice(row.invoiceNo)}
+              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+              title="View Invoice"
+            >
+              <FileText className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            onClick={() => handleDeletePayment(row)}
+            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            title="Delete Payment"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       )
     }
@@ -556,6 +687,204 @@ const CustomerProfile = () => {
         invoiceNo={selectedInvoice}
         mode={modalMode}
       />
+      
+      {/* View Payment Modal */}
+      {showViewPaymentModal && selectedPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <CreditCard className="w-6 h-6 text-blue-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-gray-900">Payment Details</h3>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowViewPaymentModal(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center mb-4">
+                  <div className={`p-2 rounded-full ${
+                    selectedPayment.type === 'receive' ? 'bg-green-100' : 'bg-red-100'
+                  } flex-shrink-0`}>
+                    {selectedPayment.type === 'receive' ? (
+                      <ArrowDownLeft className="w-5 h-5 text-green-600" />
+                    ) : (
+                      <ArrowUpRight className="w-5 h-5 text-red-600" />
+                    )}
+                  </div>
+                  <div className="ml-3">
+                    <h4 className="font-semibold text-gray-900">
+                      {selectedPayment.type === 'receive' ? 'Payment Received' : 'Payment Out'}
+                    </h4>
+                    <p className="text-sm text-gray-600">
+                      {new Date(selectedPayment.paymentDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Payment Number:</span>
+                    <span className="font-medium text-blue-600">{selectedPayment.paymentNo || 'N/A'}</span>
+                  </div>
+                  
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Amount:</span>
+                    <span className={`font-semibold ${
+                      selectedPayment.type === 'receive' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {selectedPayment.type === 'receive' ? '+' : '-'}${selectedPayment.amount.toLocaleString()}
+                    </span>
+                  </div>
+                  
+                  {selectedPayment.customerId && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Customer:</span>
+                      <span className="font-medium text-gray-900">
+                        {customer.customerName || 'Unknown Customer'}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {selectedPayment.carId && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Car:</span>
+                      <span className="font-medium">
+                        {cars?.find(c => c._id === selectedPayment.carId)?.carName || 'Unknown Car'}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {selectedPayment.accountMonth && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Account Month:</span>
+                      <span className="font-medium">{selectedPayment.accountMonth}</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Description:</span>
+                    <span className="font-medium text-gray-800">{selectedPayment.description || 'No description'}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex justify-between mt-6 pt-4 border-t border-gray-200">
+                <Button variant="outline" onClick={() => setShowViewPaymentModal(false)}>Close</Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => handleEditPayment(selectedPayment)}
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit Payment
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Payment Modal */}
+      {selectedPayment && (
+        <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${showEditPaymentModal ? 'block' : 'hidden'}`}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <CreditCard className="w-6 h-6 text-blue-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-gray-900">Edit Payment</h3>
+                </div>
+                <button
+                  onClick={() => setShowEditPaymentModal(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            <form onSubmit={handleUpdatePayment} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Number
+                </label>
+                <input
+                  name="paymentNo"
+                  value={editPaymentData.paymentNo}
+                  onChange={handleEditPaymentChange}
+                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  disabled
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Date
+                </label>
+                <input
+                  name="paymentDate"
+                  type="date"
+                  value={editPaymentData.paymentDate}
+                  onChange={handleEditPaymentChange}
+                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Amount
+                </label>
+                <input
+                  name="amount"
+                  type="number"
+                  value={editPaymentData.amount}
+                  onChange={handleEditPaymentChange}
+                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description
+                </label>
+                <input
+                  name="description"
+                  value={editPaymentData.description}
+                  onChange={handleEditPaymentChange}
+                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="Payment description"
+                />
+              </div>
+              
+              <div className="flex space-x-4 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowEditPaymentModal(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" className="flex-1">
+                  Update Payment
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
     
   );

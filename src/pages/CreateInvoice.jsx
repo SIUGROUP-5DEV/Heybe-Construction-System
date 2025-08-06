@@ -4,6 +4,7 @@ import { ArrowLeft, Building2, ChevronLeft, ChevronRight, Save, Plus, Trash2 } f
 import Button from '../components/Button';
 import FormInput from '../components/FormInput';
 import FormSelect from '../components/FormSelect';
+import SearchableDropdown from '../components/SearchableDropdown';
 import { useToast } from '../contexts/ToastContext';
 import { invoicesAPI, carsAPI, itemsAPI, customersAPI } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -59,9 +60,10 @@ const CreateInvoice = () => {
     balance: 0
   });
 
-  // Load data from database
+  // Load data from database and get next invoice number
   useEffect(() => {
     loadAllData();
+    getNextInvoiceNumber();
   }, []);
 
   const loadAllData = async () => {
@@ -87,6 +89,36 @@ const CreateInvoice = () => {
       showError('Load Failed', 'Failed to load required data for invoice creation');
     } finally {
       setLoadingData(false);
+    }
+  };
+
+  const getNextInvoiceNumber = async () => {
+    try {
+      const response = await invoicesAPI.getAll();
+      const invoices = response.data;
+      
+      if (invoices.length === 0) {
+        setFormData(prev => ({ ...prev, invoiceNo: 'INV-001' }));
+        setCurrentInvoice(1);
+      } else {
+        // Find the highest invoice number
+        const invoiceNumbers = invoices
+          .map(inv => inv.invoiceNo)
+          .filter(no => no.startsWith('INV-'))
+          .map(no => parseInt(no.replace('INV-', '')))
+          .filter(num => !isNaN(num));
+        
+        const maxNumber = Math.max(...invoiceNumbers, 0);
+        const nextNumber = maxNumber + 1;
+        const nextInvoiceNo = `INV-${String(nextNumber).padStart(3, '0')}`;
+        
+        setFormData(prev => ({ ...prev, invoiceNo: nextInvoiceNo }));
+        setCurrentInvoice(nextNumber);
+      }
+    } catch (error) {
+      console.error('❌ Error getting next invoice number:', error);
+      setFormData(prev => ({ ...prev, invoiceNo: 'INV-001' }));
+      setCurrentInvoice(1);
     }
   };
 
@@ -280,11 +312,7 @@ const CreateInvoice = () => {
     const total = invoiceItems.reduce((sum, item) => sum + item.total, 0);
     const totalLeft = invoiceItems.reduce((sum, item) => sum + item.leftAmount, 0);
     
-    // 🔧 FIXED PROFIT CALCULATION
-    // Profit = 20% of the PAID amount (Total - Left Amount)
-    const paidAmount = total - totalLeft;
-    
-    return { total, totalLeft, paidAmount };
+    return { total, totalLeft };
   };
 
   const validateForm = () => {
@@ -315,24 +343,33 @@ const CreateInvoice = () => {
     return true;
   };
 
-  // NEW: Automatic amount distribution function
+  // NEW: Simplified amount distribution function (NO PROFIT CALCULATION)
   const distributeAmounts = async (invoiceData) => {
     try {
       const selectedCar = cars.find(car => car._id === formData.carId);
       
-      console.log('🔄 Starting automatic amount distribution...');
+      console.log('🔄 Starting simplified amount distribution...');
       
-      // 1. Update Car Balance (add total, left amount, and profit)
+      // 1. Update Car Balance (add total only)
       if (selectedCar) {
-        const { total, totalLeft,  } = invoiceData;
-        const newCarBalance = (selectedCar.balance || 0) + total + totalLeft ;
+        const { total } = invoiceData;
+        const newCarBalance = (selectedCar.balance || 0) + total;
         await carsAPI.update(formData.carId, { 
           balance: newCarBalance 
         });
-        console.log(`✅ Car ${selectedCar.carName} balance updated = $${newCarBalance}`);
+        console.log(`✅ Car ${selectedCar.carName} balance updated: +$${total} = $${newCarBalance}`);
       }
 
-      // 2. Process each item for customer balances
+      // 2. Update Car Left Amount (add totalLeft)
+      if (selectedCar && invoiceData.totalLeft > 0) {
+        const newCarLeft = (selectedCar.left || 0) + invoiceData.totalLeft;
+        await carsAPI.update(formData.carId, { 
+          left: newCarLeft 
+        });
+        console.log(`✅ Car ${selectedCar.carName} left amount updated: +$${invoiceData.totalLeft} = $${newCarLeft}`);
+      }
+
+      // 3. Process each item for customer balances
       for (const item of invoiceData.items) {
         const selectedCustomer = customers.find(cust => cust._id === item.customerId);
         
@@ -352,10 +389,10 @@ const CreateInvoice = () => {
         }
       }
       
-      console.log('🎉 Automatic amount distribution completed successfully!');
+      console.log('🎉 Simplified amount distribution completed successfully!');
       
     } catch (error) {
-      console.error('❌ Error in automatic distribution:', error);
+      console.error('❌ Error in amount distribution:', error);
       showError('Distribution Error', 'Error distributing amounts. Please check manually.');
     }
   };
@@ -366,7 +403,70 @@ const CreateInvoice = () => {
     setLoading(true);
     
     try {
-      const { total, totalLeft,  } = calculateTotals();
+      const { total, totalLeft } = calculateTotals();
+      const invoiceData = {
+        invoiceNo: formData.invoiceNo,
+        carId: formData.carId,
+        invoiceDate: formData.invoiceDate,
+        items: invoiceItems.map(item => ({
+          itemId: item.itemId,
+          customerId: item.customerId,
+          description: item.description,
+          quantity: item.quantity,
+          price: item.price,
+          total: item.total,
+          leftAmount: item.leftAmount,
+          paymentMethod: item.paymentMethod
+        })),
+        total,
+        totalLeft,
+        totalProfit: 0
+      };
+      
+      // Create invoice first
+      const response = await invoicesAPI.create(invoiceData);
+      console.log('✅ Invoice created:', response.data);
+      
+      // Then distribute amounts
+      await distributeAmounts(invoiceData);
+      
+      // Remove from localStorage after successful submission
+      localStorage.removeItem(`invoice_${formData.invoiceNo}`);
+      
+      showSuccess(
+        'Invoice Created & Ready for Another', 
+        `Invoice ${formData.invoiceNo} created successfully! Ready to create another invoice.`
+      );
+      
+      // Reset form for next invoice instead of navigating
+      const nextInvoiceNo = currentInvoice + 1;
+      setCurrentInvoice(nextInvoiceNo);
+      
+      // Update invoice number
+      const newInvoiceNo = `INV-${String(nextInvoiceNo).padStart(3, '0')}`;
+      setFormData(prev => ({
+        ...prev,
+        invoiceNo: newInvoiceNo
+      }));
+      
+      // Reset form
+      resetForm(newInvoiceNo);
+      
+    } catch (error) {
+      console.error('❌ Error creating invoice:', error);
+      showError('Creation Failed', error.response?.data?.error || 'Error creating invoice. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateInvoiceAndAnother = async () => {
+    if (!validateForm()) return;
+    
+    setLoading(true);
+    
+    try {
+      const { total, totalLeft } = calculateTotals();
       
       const invoiceData = {
         invoiceNo: formData.invoiceNo,
@@ -384,27 +484,37 @@ const CreateInvoice = () => {
         })),
         total,
         totalLeft,
-        
+        totalProfit: 0
       };
       
       // Create invoice first
       const response = await invoicesAPI.create(invoiceData);
       console.log('✅ Invoice created:', response.data);
       
-      // Then distribute amounts automatically
+      // Then distribute amounts
       await distributeAmounts(invoiceData);
       
       // Remove from localStorage after successful submission
       localStorage.removeItem(`invoice_${formData.invoiceNo}`);
       
       showSuccess(
-        'Invoice Created & Distributed', 
-        `Invoice ${formData.invoiceNo} created successfully! Amounts automatically distributed to car and customers.`
+        'Invoice Created & Ready for Another', 
+        `Invoice ${formData.invoiceNo} created and distributed successfully! Ready to create another invoice.`
       );
       
-      setTimeout(() => {
-        navigate('/invoices');
-      }, 2000);
+      // Reset form for next invoice instead of navigating
+      const nextInvoiceNo = currentInvoice + 1;
+      setCurrentInvoice(nextInvoiceNo);
+      
+      // Update invoice number
+      const newInvoiceNo = `INV-${String(nextInvoiceNo).padStart(3, '0')}`;
+      setFormData(prev => ({
+        ...prev,
+        invoiceNo: newInvoiceNo
+      }));
+      
+      // Reset form
+      resetForm(newInvoiceNo);
       
     } catch (error) {
       console.error('❌ Error creating invoice:', error);
@@ -414,28 +524,6 @@ const CreateInvoice = () => {
     }
   };
 
-  const handleSave = async () => {
-    if (!validateForm()) return;
-    
-    try {
-      const { total, totalLeft } = calculateTotals();
-      const invoiceData = {
-        ...formData,
-        items: invoiceItems,
-        total,
-        totalLeft
-      };
-      
-      // Save to localStorage for persistence
-      localStorage.setItem(`invoice_${formData.invoiceNo}`, JSON.stringify(invoiceData));
-      
-      showSuccess('Invoice Saved', `Invoice ${formData.invoiceNo} saved as draft successfully!`);
-      
-    } catch (error) {
-      console.error('❌ Error saving invoice:', error);
-      showError('Save Failed', 'Error saving invoice. Please try again.');
-    }
-  };
 
   const handlePreviousInvoice = () => {
     if (currentInvoice > 1) {
@@ -504,7 +592,7 @@ const CreateInvoice = () => {
     );
   }
 
-  const { total, totalLeft, totalProfit, paidAmount } = calculateTotals();
+  const { total, totalLeft } = calculateTotals();
 
   return (
     <div className="space-y-6">
@@ -599,12 +687,13 @@ const CreateInvoice = () => {
               value={formData.invoiceNo}
               onChange={handleFormChange}
               required
+              disabled
             />
           </div>
         </div>
 
         {/* Invoice Items */}
-        <div className="p-6">
+        <div className="p-6 relative">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Invoice Items</h3>
             <Button
@@ -618,7 +707,7 @@ const CreateInvoice = () => {
             </Button>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto relative z-0">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-200">
@@ -637,34 +726,66 @@ const CreateInvoice = () => {
                 {invoiceItems.map((item, index) => (
                   <tr key={item.id} className="border-b border-gray-100">
                     <td className="py-2 px-2">
-                      <select
-                        value={item.itemId}
-                        onChange={(e) => handleItemChange(index, 'itemId', e.target.value)}
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select item</option>
-                        {items.map(itm => (
-                          <option key={itm._id} value={itm._id}>{itm.itemName}</option>
-                        ))}
-                        <option value="add_new" className="bg-blue-50 text-blue-700 font-medium">
-                          ➕ Add New Item
-                        </option>
-                      </select>
+                      {/* Searchable Item Dropdown - Like the image */}
+                      <div>
+                        <SearchableDropdown
+                        placeholder="Search & select item..."
+                        value={(() => {
+                          const selectedItem = items.find(i => i._id === item.itemId);
+                          return selectedItem ? selectedItem.itemName : '';
+                        })()}
+                        options={items.map(itm => ({
+                          id: itm._id,
+                          label: itm.itemName,
+                          subtitle: `Price: $${itm.price || 0}`
+                        }))}
+                        onSelect={(selectedItem) => {
+                          if (selectedItem) {
+                            handleItemChange(index, 'itemId', selectedItem.id);
+                          } else {
+                            handleItemChange(index, 'itemId', '');
+                          }
+                        }}
+                        onAddNew={(searchTerm) => {
+                          setNewItemData(prev => ({ ...prev, itemName: searchTerm }));
+                          setCurrentItemIndex(index);
+                          setShowAddItemModal(true);
+                        }}
+                        addNewText="Add New Item"
+                        width="180px"
+                      />
+                      </div>
                     </td>
                     <td className="py-2 px-2">
-                      <select
-                        value={item.customerId}
-                        onChange={(e) => handleItemChange(index, 'customerId', e.target.value)}
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select customer</option>
-                        {customers.map(customer => (
-                          <option key={customer._id} value={customer._id}>{customer.customerName}</option>
-                        ))}
-                        <option value="add_new" className="bg-green-50 text-green-700 font-medium">
-                          ➕ Add New Customer
-                        </option>
-                      </select>
+                      {/* Searchable Customer Dropdown - Like the image */}
+                      <div>
+                        <SearchableDropdown
+                        placeholder="Search & select customer..."
+                        value={(() => {
+                          const selectedCustomer = customers.find(c => c._id === item.customerId);
+                          return selectedCustomer ? selectedCustomer.customerName : '';
+                        })()}
+                        options={customers.map(customer => ({
+                          id: customer._id,
+                          label: customer.customerName,
+                          subtitle: `Balance: $${(customer.balance || 0).toLocaleString()}`
+                        }))}
+                        onSelect={(selectedCustomer) => {
+                          if (selectedCustomer) {
+                            handleItemChange(index, 'customerId', selectedCustomer.id);
+                          } else {
+                            handleItemChange(index, 'customerId', '');
+                          }
+                        }}
+                        onAddNew={(searchTerm) => {
+                          setNewCustomerData(prev => ({ ...prev, customerName: searchTerm }));
+                          setCurrentItemIndex(index);
+                          setShowAddCustomerModal(true);
+                        }}
+                        addNewText="Add New Customer"
+                        width="200px"
+                      />
+                      </div>
                     </td>
                     <td className="py-2 px-2">
                       <input
@@ -732,12 +853,12 @@ const CreateInvoice = () => {
             </table>
           </div>
 
-          {/* Totals with Detailed Breakdown */}
+          {/* Totals - Simplified without profit */}
           <div className="mt-6 bg-gray-50 rounded-lg p-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Left Column - Calculation Breakdown */}
               <div className="space-y-3">
-                <h4 className="font-semibold text-gray-900 mb-3">💰 Calculation Breakdown</h4>
+                <h4 className="font-semibold text-gray-900 mb-3">💰 Invoice Summary</h4>
                 
                 <div className="flex justify-between items-center p-2 bg-white rounded border">
                   <span className="text-sm font-medium text-gray-600">Total Amount:</span>
@@ -746,39 +867,33 @@ const CreateInvoice = () => {
                 
                 <div className="flex justify-between items-center p-2 bg-white rounded border">
                   <span className="text-sm font-medium text-gray-600">Left Amount:</span>
-                  <span className="text-lg font-bold text-red-600">-${totalLeft.toFixed(2)}</span>
+                  <span className="text-lg font-bold text-red-600">${totalLeft.toFixed(2)}</span>
                 </div>
                 
-                <div className="flex justify-between items-center p-2 bg-green-50 rounded border border-green-200">
-                  <span className="text-sm font-medium text-green-700">Paid Amount:</span>
-                  <span className="text-lg font-bold text-green-600">${paidAmount.toFixed(2)}</span>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Note:</strong> Profit calculation will be done during monthly account closing, not during invoice creation.
+                  </p>
                 </div>
-                
-   
               </div>
               
               {/* Right Column - Action Buttons */}
               <div className="flex flex-col justify-center space-y-4">
                 <Button
-                  onClick={handleSave}
-                  variant="outline"
+                  onClick={handleCreateInvoiceAndAnother}
                   disabled={loading}
-                >
-                  <Save className="w-5 h-5 mr-2" />
-                  Save Draft
-                </Button>
-                
-                <Button
-                  onClick={handleSubmit}
-                  disabled={loading}
+                  className="w-full"
                 >
                   {loading ? (
                     <>
                       <div className="w-5 h-5 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Creating & Distributing...
+                      Creating Invoice...
                     </>
                   ) : (
-                    'Create Invoice & Distribute'
+                    <>
+                      <Save className="w-5 h-5 mr-2" />
+                      Create Invoice & Another Invoice & Distribute
+                    </>
                   )}
                 </Button>
               </div>
@@ -810,20 +925,6 @@ const CreateInvoice = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Price *</label>
-                <input
-                  type="number"
-                  name="price"
-                  value={newItemData.price}
-                  onChange={handleNewItemChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="0.00"
-                  min="0"
-                  step="0.01"
-                  required
-                />
-              </div>
 
               <div className="flex space-x-4 pt-4">
                 <Button
@@ -922,38 +1023,19 @@ const CreateInvoice = () => {
 
       {/* Instructions */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-2">🎯 Profit Calculation Formula</h3>
-        <div className="bg-white border border-blue-200 rounded-lg p-4 mb-4">
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Total Amount:</span>
-              <span className="font-mono">${total.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Left Amount:</span>
-              <span className="font-mono">-${totalLeft.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between border-t pt-2">
-              <span className="font-medium text-green-700">Paid Amount:</span>
-              <span className="font-mono font-bold text-green-600">${paidAmount.toFixed(2)}</span>
-            </div>
-         
-          </div>
-        </div>
+        <h3 className="text-lg font-semibold text-blue-900 mb-2">🎯 New Invoice System</h3>
         <ul className="text-blue-800 space-y-1">
- 
-          <li>• <strong>Navigation:</strong> Use ← Previous and Next → buttons to switch between invoices</li>
-          <li>• <strong>Add New Items:</strong> Select "➕ Add New Item" from dropdown to create items on the fly</li>
-          <li>• <strong>Add New Customers:</strong> Select "➕ Add New Customer" from dropdown to create customers instantly</li>
-          <li>• <strong>Auto-Selection:</strong> Newly created items/customers are automatically selected in the current row</li>
-          <li>• <strong>Car Balance:</strong> Total + Left Amount + Profit will be added to car balance</li>
+          <li>• <strong>Auto Invoice Number:</strong> Invoice numbers are automatically generated (+1 from last invoice)</li>
+          <li>• <strong>No Search in Tables:</strong> Items and customers are shown as simple dropdowns</li>
+          <li>• <strong>No Profit Calculation:</strong> Profit will be calculated only during monthly account closing</li>
+          <li>• <strong>Simple Distribution:</strong> Invoice total → car balance, left amount → car left</li>
           <li>• <strong>Customer Credit:</strong> If payment method is "Credit", amount added to customer balance</li>
           <li>• <strong>Customer Cash:</strong> If payment method is "Cash", recorded as transaction only</li>
+          <li>• <strong>Monthly Closing:</strong> Profit calculation happens when account is closed at month end</li>
         </ul>
       </div>
 
-<Footer/>
-
+      <Footer/>
     </div>
   );
 };
