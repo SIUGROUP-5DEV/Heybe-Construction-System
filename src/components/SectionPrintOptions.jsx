@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { format } from 'date-fns';
+import { logo } from '../assets/logo.png';
 
 const SectionPrintOptions = ({ 
   data, 
@@ -235,7 +236,7 @@ const SectionPrintOptions = ({
         </head>
         <body>
           <div class="header">
-            <div class="logo">HC</div>
+           img src={logo} alt="compnay logo" class="logo" />
             <div class="company-info">
               <h1>Haype Construction</h1>
               <p>Business Management System</p>
