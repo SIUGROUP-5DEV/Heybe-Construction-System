@@ -8,6 +8,8 @@ import { itemsAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Footer from '../components/Footer';
+import SectionPrintOptions from '../components/SectionPrintOptions';
+import { format } from 'date-fns';
 
 const ItemsCenter = () => {
   const { showSuccess, showError } = useToast();
@@ -154,6 +156,21 @@ const ItemsCenter = () => {
 
       {/* Items Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">Items List</h2>
+          <SectionPrintOptions
+            data={filteredItems}
+            columns={columns}
+            title="Items Center"
+            sectionName="All Items"
+            profileData={{
+              'Total Items': items.length,
+              'Average Price': items.length > 0 ? `$${(items.reduce((sum, item) => sum + item.price, 0) / items.length).toFixed(0)}` : '$0',
+              'Highest Price': items.length > 0 ? `$${Math.max(...items.map(item => item.price)).toFixed(0)}` : '$0',
+              'Report Generated': format(new Date(), 'MMMM dd, yyyy')
+            }}
+          />
+        </div>
         <Table 
           data={filteredItems} 
           columns={columns}

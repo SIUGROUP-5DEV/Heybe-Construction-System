@@ -7,6 +7,7 @@ import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
+import SectionPrintOptions from '../components/SectionPrintOptions';
 
 const CustomerReports = () => {
   const { showError, showSuccess } = useToast();
@@ -100,7 +101,8 @@ const CustomerReports = () => {
           // Check both populated and non-populated customer references
           const itemCustomerId = item.customerId?._id || item.customerId;
           
-          if (itemCustomerId === selectedCustomer) {
+          // Only include credit transactions in customer reports
+          if (itemCustomerId === selectedCustomer && item.paymentMethod === 'credit') {
             const itemName = item.itemId?.itemName || item.itemName || 'Unknown Item';
             
             if (!itemGroups[itemName]) {
@@ -167,7 +169,182 @@ const CustomerReports = () => {
     }
   };
   const handlePrint = () => {
-    window.print();
+    if (!selectedCustomer || reportData.length === 0) {
+      showError('Print Error', 'Please select a customer and load data before printing');
+      return;
+    }
+    
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank');
+    
+    // Prepare customer profile data
+    const profileData = {
+      'Customer Name': selectedCustomerName,
+      'Report Period': `${format(dateRange.from, 'MMM dd')} - ${format(dateRange.to, 'MMM dd, yyyy')}`,
+      'Total Items': `${reportData.length} different items`,
+      'Total Transactions': `${reportData.reduce((sum, item) => sum + item.transactions.length, 0)} transactions`
+    };
+    
+    // Prepare summary data
+    const summaryData = {
+      'Total Value': `$${reportData.reduce((sum, item) => sum + item.totalValue, 0).toLocaleString()}`,
+      'Total Quantity': `${reportData.reduce((sum, item) => sum + item.totalQuantity, 0)} units`,
+      'Total Payments': `$${paymentsData.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`,
+      'Outstanding Balance': `$${(reportData.reduce((sum, item) => sum + item.totalValue, 0) - paymentsData.reduce((sum, p) => sum + p.amount, 0)).toLocaleString()}`
+    };
+    
+    // Flatten all transactions for printing
+    const allTransactions = [];
+    reportData.forEach(item => {
+      item.transactions.forEach(transaction => {
+        allTransactions.push({
+          date: format(new Date(transaction.date), 'MMM dd, yyyy'),
+          invoiceNo: transaction.invoiceNo,
+          itemName: item.itemName,
+          carName: transaction.carName,
+          quantity: `${transaction.quantity} units`,
+          price: `$${transaction.price}`,
+          total: `$${transaction.total.toLocaleString()}`,
+          paymentMethod: transaction.paymentMethod.toUpperCase()
+        });
+      });
+    });
+    
+    // Generate the HTML content
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Customer Report - ${selectedCustomerName}</title>
+          <style>
+            @page { margin: 0.5in; size: A4; }
+            body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.4; color: black; margin: 0; padding: 20px; }
+            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid black; padding-bottom: 20px; }
+            .company-name { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
+            .report-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+            .report-date { font-size: 12px; color: #666; }
+            .profile-section { margin-bottom: 30px; padding: 15px; border: 1px solid #ccc; background-color: #f9f9f9; }
+            .profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 10px; }
+            .profile-item { display: flex; flex-direction: column; }
+            .profile-label { font-size: 10px; color: #666; margin-bottom: 2px; }
+            .profile-value { font-weight: bold; font-size: 14px; }
+            .data-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            .data-table th, .data-table td { border: 1px solid black; padding: 8px; text-align: left; font-size: 11px; }
+            .data-table th { background-color: #f0f0f0; font-weight: bold; }
+            .data-table tr:nth-child(even) { background-color: #f9f9f9; }
+            .summary-section { margin-top: 30px; padding: 15px; border: 2px solid black; background-color: #f0f0f0; }
+            .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 10px; }
+            .summary-item { text-align: center; padding: 10px; border: 1px solid #ccc; background-color: white; }
+            .summary-label { font-size: 10px; color: #666; margin-bottom: 5px; }
+            .summary-value { font-weight: bold; font-size: 16px; }
+            .no-break { page-break-inside: avoid; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">Haype Construction</div>
+            <div class="report-title">Customer Report - ${selectedCustomerName}</div>
+            <div class="report-date">Generated on ${new Date().toLocaleDateString()}</div>
+          </div>
+          
+          <div class="profile-section no-break">
+            <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: bold;">Customer Information</h3>
+            <div class="profile-grid">
+              ${Object.entries(profileData).map(([key, value]) => `
+                <div class="profile-item">
+                  <div class="profile-label">${key}</div>
+                  <div class="profile-value">${value}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          
+          <div class="no-break">
+            <h3 style="margin: 20px 0 10px 0; font-size: 16px; font-weight: bold;">Credit Transactions (${allTransactions.length} records)</h3>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Invoice No</th>
+                  <th>Item Name</th>
+                  <th>Car Name</th>
+                  <th>Quantity</th>
+                  <th>Price</th>
+                  <th>Total</th>
+                  <th>Payment Method</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${allTransactions.map(transaction => `
+                  <tr>
+                    <td>${transaction.date}</td>
+                    <td>${transaction.invoiceNo}</td>
+                    <td>${transaction.itemName}</td>
+                    <td>${transaction.carName}</td>
+                    <td>${transaction.quantity}</td>
+                    <td>${transaction.price}</td>
+                    <td>${transaction.total}</td>
+                    <td>${transaction.paymentMethod}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          
+          ${paymentsData.length > 0 ? `
+            <div class="no-break">
+              <h3 style="margin: 20px 0 10px 0; font-size: 16px; font-weight: bold;">Payment History (${paymentsData.length} records)</h3>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Payment No</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Balance Impact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${paymentsData.map(payment => `
+                    <tr>
+                      <td>${format(new Date(payment.paymentDate), 'MMM dd, yyyy')}</td>
+                      <td>${payment.type === 'receive' ? 'Payment Received' : 'Credit Purchase'}</td>
+                      <td>${payment.paymentNo || 'N/A'}</td>
+                      <td>${payment.description || 'No description'}</td>
+                      <td>${payment.type === 'receive' ? '-' : '+'}$${payment.amount.toLocaleString()}</td>
+                      <td>${payment.type === 'receive' ? 'Reduced balance' : 'Added to balance'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : ''}
+          
+          <div class="summary-section no-break">
+            <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: bold;">Financial Summary</h3>
+            <div class="summary-grid">
+              ${Object.entries(summaryData).map(([key, value]) => `
+                <div class="summary-item">
+                  <div class="summary-label">${key}</div>
+                  <div class="summary-value">${value}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    // Write content to new window and print
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    
+    // Wait for content to load then print
+    printWindow.onload = () => {
+      printWindow.print();
+      printWindow.close();
+    };
   };
 
   const handleApplyFilter = () => {
@@ -390,6 +567,52 @@ const CustomerReports = () => {
           {/* Report Data */}
           <div className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Transaction Summary by Item</h3>
+            
+            {/* Section Print Options for Customer Reports */}
+            <div className="mb-6 flex justify-end">
+              <SectionPrintOptions
+                data={(() => {
+                  // Flatten all transactions for export
+                  const allTransactions = [];
+                  reportData.forEach(item => {
+                    item.transactions.forEach(transaction => {
+                      allTransactions.push({
+                        date: transaction.date,
+                        invoiceNo: transaction.invoiceNo,
+                        itemName: item.itemName,
+                        carName: transaction.carName,
+                        quantity: transaction.quantity,
+                        price: transaction.price,
+                        total: transaction.total,
+                        paymentMethod: transaction.paymentMethod
+                      });
+                    });
+                  });
+                  return allTransactions;
+                })()}
+                columns={[
+                  { header: 'Date', accessor: 'date' },
+                  { header: 'Invoice No', accessor: 'invoiceNo' },
+                  { header: 'Item Name', accessor: 'itemName' },
+                  { header: 'Car Name', accessor: 'carName' },
+                  { header: 'Quantity', accessor: 'quantity' },
+                  { header: 'Price', accessor: 'price' },
+                  { header: 'Total', accessor: 'total' },
+                  { header: 'Payment Method', accessor: 'paymentMethod' }
+                ]}
+                title="Customer Reports"
+                sectionName="Customer Transaction Report"
+                profileData={{
+                  'Customer Name': selectedCustomerName,
+                  'Report Period': `${format(dateRange.from, 'MMM dd')} - ${format(dateRange.to, 'MMM dd, yyyy')}`,
+                  'Total Items': `${reportData.length} different items`,
+                  'Total Transactions': `${reportData.reduce((sum, item) => sum + item.transactions.length, 0)} transactions`,
+                  'Total Value': `$${reportData.reduce((sum, item) => sum + item.totalValue, 0).toLocaleString()}`,
+                  'Total Payments': `$${paymentsData.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
+                }}
+                dateRange={dateRange}
+              />
+            </div>
             
             <div className="space-y-4">
               {reportData.map((item, index) => (

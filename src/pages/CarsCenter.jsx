@@ -9,6 +9,8 @@ import { carsAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Footer from '../components/Footer';
+import SectionPrintOptions from '../components/SectionPrintOptions';
+import { format } from 'date-fns';
 
 const CarsCenter = () => {
   const { showSuccess, showError } = useToast();
@@ -209,6 +211,21 @@ const CarsCenter = () => {
 
       {/* Cars Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">Cars List</h2>
+          <SectionPrintOptions
+            data={filteredCars}
+            columns={columns}
+            title="Cars Center"
+            sectionName="All Cars"
+            profileData={{
+              'Total Cars': cars.length,
+              'Active Cars': cars.filter(car => car.status === 'Active').length,
+              'Total Fleet Balance': `$${cars.reduce((sum, car) => sum + (car.balance || 0), 0).toLocaleString()}`,
+              'Report Generated': format(new Date(), 'MMMM dd, yyyy')
+            }}
+          />
+        </div>
         <Table 
           data={filteredCars} 
           columns={columns}

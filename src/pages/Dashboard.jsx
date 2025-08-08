@@ -214,9 +214,9 @@ const Dashboard = () => {
           <div className="max-w-md">
             <DashboardCard
               title={selectedCarData.carName}
+              left={selectedCarData.carLeft}
               balance={selectedCarData.carBalance}
               profit={selectedCarData.carProfit}
-              left={selectedCarData.carLeft}
               icon={Car}
               gradient="from-blue-500 to-blue-600"
             />
@@ -286,11 +286,11 @@ const Dashboard = () => {
                 <div className="flex items-center">
                   <TrendingUp className="w-6 h-6 text-green-600 mr-2" />
                   <div>
-                    <p className="text-sm text-gray-600">Estimated Profit</p>
+                    <p className="text-sm text-gray-600">Current Balance</p>
                     <p className="text-xl font-bold text-green-600">
-                      ${selectedCarData.carProfit.toLocaleString()}
+                      ${selectedCarData.carBalance.toLocaleString()}
                     </p>
-                    <p className="text-xs text-gray-500">15% of balance</p>
+                    <p className="text-xs text-gray-500">Lacagta La shaqeeyay</p>
                   </div>
                 </div>
               </div>
@@ -299,11 +299,11 @@ const Dashboard = () => {
                 <div className="flex items-center">
                   <AlertCircle className="w-6 h-6 text-orange-600 mr-2" />
                   <div>
-                    <p className="text-sm text-gray-600">Outstanding Amount</p>
+                    <p className="text-sm text-gray-600">Left  Amount</p>
                     <p className="text-xl font-bold text-orange-600">
                       ${selectedCarData.carLeft.toLocaleString()}
                     </p>
-                    <p className="text-xs text-gray-500">8% of balance</p>
+                    <p className="text-xs text-gray-500">Lacagta K baxday</p>
                   </div>
                 </div>
               </div>
@@ -312,11 +312,11 @@ const Dashboard = () => {
                 <div className="flex items-center">
                   <DollarSign className="w-6 h-6 text-blue-600 mr-2" />
                   <div>
-                    <p className="text-sm text-gray-600">Net Available</p>
+                    <p className="text-sm text-gray-600">Prfit Available</p>
                     <p className="text-xl font-bold text-blue-600">
                       ${(selectedCarData.carBalance - selectedCarData.carLeft).toLocaleString()}
                     </p>
-                    <p className="text-xs text-gray-500">Balance - Outstanding</p>
+                    <p className="text-xs text-gray-500">Balance - Left</p>
                   </div>
                 </div>
               </div>

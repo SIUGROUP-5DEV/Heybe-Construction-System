@@ -9,6 +9,8 @@ import { customersAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Footer from '../components/Footer';
+import SectionPrintOptions from '../components/SectionPrintOptions';
+import { format } from 'date-fns';
 
 const CustomerCenter = () => {
   const { showSuccess, showError } = useToast();
@@ -215,6 +217,22 @@ const CustomerCenter = () => {
 
       {/* Customers Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">Customers List</h2>
+          <SectionPrintOptions
+            data={filteredCustomers}
+            columns={columns}
+            title="Customer Center"
+            sectionName="All Customers"
+            profileData={{
+              'Total Customers': customers.length,
+              'Cash Customers': customers.filter(customer => (customer.balance || 0) === 0).length,
+              'Credit Customers': customers.filter(customer => (customer.balance || 0) > 0).length,
+              'Total Outstanding': `$${customers.reduce((sum, customer) => sum + (customer.balance || 0), 0).toLocaleString()}`,
+              'Report Generated': format(new Date(), 'MMMM dd, yyyy')
+            }}
+          />
+        </div>
         <Table 
           data={filteredCustomers} 
           columns={columns}

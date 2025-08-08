@@ -50,7 +50,9 @@ const CreateInvoice = () => {
   // New item form data
   const [newItemData, setNewItemData] = useState({
     itemName: '',
-    price: ''
+    price: '',
+    driverPrice: '',
+    kirishboyPrice: ''
   });
 
   // New customer form data
@@ -176,21 +178,28 @@ const CreateInvoice = () => {
   const handleCreateNewItem = async (e) => {
     e.preventDefault();
     
-    if (!newItemData.itemName || !newItemData.price) {
+    if (!newItemData.itemName.trim() || !newItemData.price) {
       showError('Validation Error', 'Please fill in all required fields');
       return;
     }
 
     try {
       setLoading(true);
-      const response = await itemsAPI.create(newItemData);
+      
+      const itemToCreate = {
+        itemName: newItemData.itemName.trim(),
+        price: parseFloat(newItemData.price) || 0
+      };
+      
+      console.log('🔄 Creating new item:', itemToCreate);
+      const response = await itemsAPI.create(itemToCreate);
       console.log('✅ New item created:', response.data);
       
       // Add to items list
       const newItem = {
-        _id: response.data.itemId || Date.now().toString(),
-        itemName: newItemData.itemName,
-        price: parseFloat(newItemData.price)
+        _id: response.data._id || response.data.itemId || Date.now().toString(),
+        itemName: itemToCreate.itemName,
+        price: itemToCreate.price
       };
       
       setItems(prev => [...prev, newItem]);
@@ -212,7 +221,7 @@ const CreateInvoice = () => {
       setShowAddItemModal(false);
       setCurrentItemIndex(null);
       
-      showSuccess('Item Created', `${newItemData.itemName} has been created and selected!`);
+      showSuccess('Item Created', `${itemToCreate.itemName} has been created and selected!`);
       
     } catch (error) {
       console.error('❌ Error creating item:', error);
@@ -234,22 +243,30 @@ const CreateInvoice = () => {
   const handleCreateNewCustomer = async (e) => {
     e.preventDefault();
     
-    if (!newCustomerData.customerName) {
+    if (!newCustomerData.customerName.trim()) {
       showError('Validation Error', 'Customer name is required');
       return;
     }
 
     try {
       setLoading(true);
-      const response = await customersAPI.create(newCustomerData);
+      
+      const customerToCreate = {
+        customerName: newCustomerData.customerName.trim(),
+        phoneNumber: newCustomerData.phoneNumber.trim(),
+        balance: parseFloat(newCustomerData.balance) || 0
+      };
+      
+      console.log('🔄 Creating new customer:', customerToCreate);
+      const response = await customersAPI.create(customerToCreate);
       console.log('✅ New customer created:', response.data);
       
       // Add to customers list
       const newCustomer = {
-        _id: response.data.customerId || Date.now().toString(),
-        customerName: newCustomerData.customerName,
-        phoneNumber: newCustomerData.phoneNumber,
-        balance: parseFloat(newCustomerData.balance) || 0
+        _id: response.data._id || response.data.customerId || Date.now().toString(),
+        customerName: customerToCreate.customerName,
+        phoneNumber: customerToCreate.phoneNumber,
+        balance: customerToCreate.balance
       };
       
       setCustomers(prev => [...prev, newCustomer]);
@@ -270,7 +287,7 @@ const CreateInvoice = () => {
       setShowAddCustomerModal(false);
       setCurrentItemIndex(null);
       
-      showSuccess('Customer Created', `${newCustomerData.customerName} has been created and selected!`);
+      showSuccess('Customer Created', `${customerToCreate.customerName} has been created and selected!`);
       
     } catch (error) {
       console.error('❌ Error creating customer:', error);
@@ -707,25 +724,25 @@ const CreateInvoice = () => {
             </Button>
           </div>
 
-          <div className="overflow-x-auto relative z-0">
+          <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 px-2 text-sm font-medium text-gray-700">Item</th>
-                  <th className="text-left py-2 px-2 text-sm font-medium text-gray-700">Customer</th>
-                  <th className="text-left py-2 px-2 text-sm font-medium text-gray-700">Description</th>
-                  <th className="text-left py-2 px-2 text-sm font-medium text-gray-700">Qty</th>
-                  <th className="text-left py-2 px-2 text-sm font-medium text-gray-700">Price</th>
-                  <th className="text-left py-2 px-2 text-sm font-medium text-gray-700">Total</th>
-                  <th className="text-left py-2 px-2 text-sm font-medium text-gray-700">Left</th>
-                  <th className="text-left py-2 px-2 text-sm font-medium text-gray-700">Payment</th>
-                  <th className="text-left py-2 px-2 text-sm font-medium text-gray-700">Action</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 bg-gray-50">Item</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 bg-gray-50">Customer</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 bg-gray-50">Description</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 bg-gray-50">Qty</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 bg-gray-50">Price</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 bg-gray-50">Total</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 bg-gray-50">Left</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 bg-gray-50">Payment</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 bg-gray-50">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {invoiceItems.map((item, index) => (
-                  <tr key={item.id} className="border-b border-gray-100">
-                    <td className="py-2 px-2">
+                  <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-4">
                       {/* Searchable Item Dropdown - Like the image */}
                       <div>
                         <SearchableDropdown
@@ -737,7 +754,7 @@ const CreateInvoice = () => {
                         options={items.map(itm => ({
                           id: itm._id,
                           label: itm.itemName,
-                          subtitle: `Price: $${itm.price || 0}`
+                          subtitle: `Available in inventory`
                         }))}
                         onSelect={(selectedItem) => {
                           if (selectedItem) {
@@ -752,11 +769,11 @@ const CreateInvoice = () => {
                           setShowAddItemModal(true);
                         }}
                         addNewText="Add New Item"
-                        width="180px"
+                        width="200px"
                       />
                       </div>
                     </td>
-                    <td className="py-2 px-2">
+                    <td className="py-3 px-4">
                       {/* Searchable Customer Dropdown - Like the image */}
                       <div>
                         <SearchableDropdown
@@ -783,66 +800,69 @@ const CreateInvoice = () => {
                           setShowAddCustomerModal(true);
                         }}
                         addNewText="Add New Customer"
-                        width="200px"
+                        width="220px"
                       />
                       </div>
                     </td>
-                    <td className="py-2 px-2">
+                    <td className="py-3 px-4">
                       <input
                         type="text"
                         value={item.description}
                         onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="Description"
                       />
                     </td>
-                    <td className="py-2 px-2">
+                    <td className="py-3 px-4">
                       <input
                         type="number"
                         value={item.quantity}
                         onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
-                        className="w-16 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-20 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         min="1"
                       />
                     </td>
-                    <td className="py-2 px-2">
+                    <td className="py-3 px-4">
                       <input
                         type="number"
                         value={item.price}
                         onChange={(e) => handleItemChange(index, 'price', parseFloat(e.target.value) || 0)}
-                        className="w-20 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         min="0"
                         step="0.01"
                       />
                     </td>
-                    <td className="py-2 px-2">
-                      <span className="font-semibold text-blue-600">${item.total.toFixed(2)}</span>
+                    <td className="py-3 px-4">
+                      <div className="bg-blue-50 px-3 py-2 rounded-lg">
+                        <span className="font-semibold text-blue-600">${item.total.toFixed(2)}</span>
+                      </div>
                     </td>
-                    <td className="py-2 px-2">
+                    <td className="py-3 px-4">
                       <input
                         type="number"
                         value={item.leftAmount}
                         onChange={(e) => handleItemChange(index, 'leftAmount', parseFloat(e.target.value) || 0)}
-                        className="w-20 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         min="0"
                         step="0.01"
                       />
                     </td>
-                    <td className="py-2 px-2">
+                    <td className="py-3 px-4">
                       <select
                         value={item.paymentMethod}
                         onChange={(e) => handleItemChange(index, 'paymentMethod', e.target.value)}
-                        className="w-20 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
                         <option value="cash">Cash</option>
                         <option value="credit">Credit</option>
                       </select>
                     </td>
-                    <td className="py-2 px-2">
+                    <td className="py-3 px-4">
                       <button
                         onClick={() => removeInvoiceItem(index)}
-                        className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         disabled={invoiceItems.length === 1}
+                        title="Remove Item"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -921,6 +941,21 @@ const CreateInvoice = () => {
                   onChange={handleNewItemChange}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="e.g., Cement, Sand, Gravel"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Price *</label>
+                <input
+                  type="number"
+                  name="price"
+                  value={newItemData.price}
+                  onChange={handleNewItemChange}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
                   required
                 />
               </div>

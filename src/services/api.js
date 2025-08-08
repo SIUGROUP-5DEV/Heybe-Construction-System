@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://haype-constraction.onrender.com/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -88,6 +88,17 @@ export const invoicesAPI = {
   getById: (id) => api.get(`/invoices/${id}`),
   update: (id, invoiceData) => api.put(`/invoices/${id}`, invoiceData),
   delete: (id) => api.delete(`/invoices/${id}`),
+  deleteWithBalanceUpdate: async (invoiceId) => {
+    // Get invoice details first
+    const invoiceResponse = await api.get(`/invoices/${invoiceId}`);
+    const invoice = invoiceResponse.data;
+    
+    // Delete the invoice
+    const deleteResponse = await api.delete(`/invoices/${invoiceId}`);
+    
+    // Return both invoice data and delete response for balance updates
+    return { invoice, deleteResponse };
+  },
 };
 
 // Payments API
@@ -100,6 +111,80 @@ export const paymentsAPI = {
     console.log('🗑️ Deleting payment with ID:', id);
     return api.delete(`/payments/${id}`);
   },
+  updateWithBalanceAdjustment: async (paymentId, updatedPaymentData, originalAmount, customerId) => {
+    console.log('🔄 API: Updating payment with balance adjustment:', {
+      paymentId,
+      updatedPaymentData,
+      originalAmount,
+      customerId
+    });
+    
+    // Update payment first
+    const paymentResponse = await api.put(`/payments/${paymentId}`, updatedPaymentData);
+    console.log('✅ Payment updated in database:', paymentResponse.data);
+    
+    // Calculate balance adjustment
+    const amountDifference = updatedPaymentData.amount - originalAmount;
+    console.log('💰 Amount difference:', amountDifference);
+    
+    // Update customer balance if there's a difference
+    if (amountDifference !== 0 && customerId) {
+      console.log('🔄 Updating customer balance for ID:', customerId);
+      const customerResponse = await customersAPI.getById(customerId);
+      const customer = customerResponse.data;
+      
+      // For payment received: if amount increases, customer balance should decrease more
+      // For payment out: if amount increases, customer balance should increase less
+      const newBalance = Math.max(0, (customer.balance || 0) - amountDifference);
+      console.log(`💰 Customer balance update: ${customer.balance} - ${amountDifference} = ${newBalance}`);
+      
+      await customersAPI.update(customerId, { balance: newBalance });
+      console.log(`✅ Customer balance adjusted: ${amountDifference > 0 ? '-' : '+'}$${Math.abs(amountDifference)} = $${newBalance}`);
+    }
+    
+    return paymentResponse;
+  },
+  deleteWithBalanceAdjustment: async (paymentId, paymentAmount, customerId, carId) => {
+    console.log('🗑️ API: Deleting payment with balance adjustment:', {
+      paymentId,
+      paymentAmount,
+      customerId,
+      carId
+    });
+    
+    // Delete payment first
+    const deleteResponse = await api.delete(`/payments/${paymentId}`);
+    console.log('✅ Payment deleted from database');
+    
+    // Adjust customer balance if applicable
+    if (customerId && paymentAmount) {
+      console.log('🔄 Adjusting customer balance after deletion');
+      const customerResponse = await customersAPI.getById(customerId);
+      const customer = customerResponse.data;
+      
+      // When deleting a payment received, add back to customer balance (increase debt)
+      // When deleting a payment out, subtract from customer balance (decrease debt)
+      const newBalance = (customer.balance || 0) + paymentAmount;
+      console.log(`💰 Customer balance restoration: ${customer.balance} + ${paymentAmount} = ${newBalance}`);
+      
+      await customersAPI.update(customerId, { balance: newBalance });
+      console.log(`✅ Customer balance adjusted after payment deletion: +$${paymentAmount} = $${newBalance}`);
+    }
+    
+    // Adjust car balance if applicable
+    if (carId && paymentAmount) {
+      console.log('🔄 Adjusting car balance after deletion');
+      const carResponse = await carsAPI.getById(carId);
+      const car = carResponse.data;
+      const newCarLeft = Math.max(0, (car.left || 0) - paymentAmount);
+      console.log(`🚗 Car left amount adjustment: ${car.left} - ${paymentAmount} = ${newCarLeft}`);
+      
+      await carsAPI.update(carId, { left: newCarLeft });
+      console.log(`✅ Car left amount adjusted after payment deletion: -$${paymentAmount} = $${newCarLeft}`);
+    }
+    
+    return deleteResponse;
+  }
 };
 
 // Dashboard API

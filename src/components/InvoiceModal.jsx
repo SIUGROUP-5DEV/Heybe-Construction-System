@@ -88,10 +88,52 @@ const InvoiceModal = ({ isOpen, onClose, invoiceNo, mode = 'view' }) => {
       setLoading(true);
       
       try {
-        // Try to delete from database first
+        // Get invoice details for balance reversal
         if (invoice._id) {
-          await invoicesAPI.delete(invoice._id);
+          const { invoice: deletedInvoice } = await invoicesAPI.deleteWithBalanceUpdate(invoice._id);
           console.log('✅ Invoice deleted from database');
+          
+          // Reverse balance changes for each item
+          for (const item of deletedInvoice.items || []) {
+            if (item.paymentMethod === 'credit' && item.customerId) {
+              try {
+                // Get current customer data
+                const customerResponse = await customersAPI.getById(item.customerId._id || item.customerId);
+                const customer = customerResponse.data;
+                
+                // Reduce customer balance by item total
+                const newBalance = Math.max(0, (customer.balance || 0) - (item.total || 0));
+                await customersAPI.update(item.customerId._id || item.customerId, { 
+                  balance: newBalance 
+                });
+                
+                console.log(`✅ Customer ${customer.customerName} balance reduced: -$${item.total} = $${newBalance}`);
+              } catch (error) {
+                console.error('❌ Error updating customer balance:', error);
+              }
+            }
+          }
+          
+          // Reverse car balance changes
+          if (deletedInvoice.carId) {
+            try {
+              const carResponse = await carsAPI.getById(deletedInvoice.carId._id || deletedInvoice.carId);
+              const car = carResponse.data;
+              
+              // Reduce car balance and left amounts
+              const newCarBalance = Math.max(0, (car.balance || 0) - (deletedInvoice.total || 0));
+              const newCarLeft = Math.max(0, (car.left || 0) - (deletedInvoice.totalLeft || 0));
+              
+              await carsAPI.update(deletedInvoice.carId._id || deletedInvoice.carId, { 
+                balance: newCarBalance,
+                left: newCarLeft
+              });
+              
+              console.log(`✅ Car ${car.carName} balance updated: -$${deletedInvoice.total} = $${newCarBalance}, Left: -$${deletedInvoice.totalLeft} = $${newCarLeft}`);
+            } catch (error) {
+              console.error('❌ Error updating car balance:', error);
+            }
+          }
         }
         
         // Also remove from localStorage
@@ -128,10 +170,58 @@ const InvoiceModal = ({ isOpen, onClose, invoiceNo, mode = 'view' }) => {
         totalProfit
       };
 
+      // Get original invoice for balance reversal
+      const originalInvoice = invoice;
+      
       // Try to update in database first
       try {
         await invoicesAPI.update(invoice._id, updatedInvoice);
         console.log('✅ Invoice updated in database');
+        
+        // Reverse original balance changes
+        if (originalInvoice.items) {
+          for (const originalItem of originalInvoice.items) {
+            if (originalItem.paymentMethod === 'credit' && originalItem.customerId) {
+              try {
+                const customerResponse = await customersAPI.getById(originalItem.customerId._id || originalItem.customerId);
+                const customer = customerResponse.data;
+                
+                // Reverse original credit amount
+                const reversedBalance = Math.max(0, (customer.balance || 0) - (originalItem.total || 0));
+                await customersAPI.update(originalItem.customerId._id || originalItem.customerId, { 
+                  balance: reversedBalance 
+                });
+                
+                console.log(`✅ Reversed customer ${customer.customerName} balance: -$${originalItem.total}`);
+              } catch (error) {
+                console.error('❌ Error reversing customer balance:', error);
+              }
+            }
+          }
+        }
+        
+        // Apply new balance changes
+        if (updatedInvoice.items) {
+          for (const newItem of updatedInvoice.items) {
+            if (newItem.paymentMethod === 'credit' && newItem.customerId) {
+              try {
+                const customerResponse = await customersAPI.getById(newItem.customerId._id || newItem.customerId);
+                const customer = customerResponse.data;
+                
+                // Apply new credit amount
+                const newBalance = (customer.balance || 0) + (newItem.total || 0);
+                await customersAPI.update(newItem.customerId._id || newItem.customerId, { 
+                  balance: newBalance 
+                });
+                
+                console.log(`✅ Applied customer ${customer.customerName} balance: +$${newItem.total} = $${newBalance}`);
+              } catch (error) {
+                console.error('❌ Error applying customer balance:', error);
+              }
+            }
+          }
+        }
+        
       } catch (dbError) {
         console.warn('⚠️ Database update failed, saving to localStorage:', dbError);
         // Fallback to localStorage
@@ -348,6 +438,9 @@ const InvoiceModal = ({ isOpen, onClose, invoiceNo, mode = 'view' }) => {
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Total</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Left</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Payment</th>
+                    {isEditing && (
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Action</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -477,6 +570,9 @@ const InvoiceModal = ({ isOpen, onClose, invoiceNo, mode = 'view' }) => {
                           </span>
                         )}
                       </td>
+                      {isEditing && (
+                        <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Action</th>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -502,8 +598,58 @@ const InvoiceModal = ({ isOpen, onClose, invoiceNo, mode = 'view' }) => {
                 </div>
                 <div className="flex items-center space-x-4">
                   <span className="text-sm font-medium text-gray-600">Total Profit:</span>
+                        
+                        {isEditing && (
+                          <td className="py-3 px-4">
+                            <div className="flex items-center space-x-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updatedItems = [...(formData.items || [])];
+                                  updatedItems.splice(index, 1);
+                                  setFormData(prev => ({ ...prev, items: updatedItems }));
+                                }}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Remove Item"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                   <span className="text-lg font-bold text-green-600">
                     ${(formData.totalProfit || invoice.totalProfit || 0).toLocaleString()}
+                    
+                    {isEditing && (
+                      <tr>
+                        <td colSpan="9" className="py-3 px-4 text-center">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const newItem = {
+                                itemId: '',
+                                customerId: '',
+                                description: '',
+                                quantity: 1,
+                                price: 0,
+                                total: 0,
+                                leftAmount: 0,
+                                paymentMethod: 'cash'
+                              };
+                              setFormData(prev => ({
+                                ...prev,
+                                items: [...(prev.items || []), newItem]
+                              }));
+                            }}
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Add New Item Row
+                          </Button>
+                        </td>
+                      </tr>
+                    )}
                   </span>
                 </div>
               </div>

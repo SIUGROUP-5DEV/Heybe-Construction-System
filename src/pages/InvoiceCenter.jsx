@@ -10,6 +10,7 @@ import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { format } from 'date-fns';
 import Footer from '../components/Footer';
+import SectionPrintOptions from '../components/SectionPrintOptions';
 
 const InvoiceCenter = () => {
   const { showSuccess, showError } = useToast();
@@ -207,6 +208,22 @@ const InvoiceCenter = () => {
 
       {/* Invoices Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">Invoices List</h2>
+          <SectionPrintOptions
+            data={filteredInvoices}
+            columns={columns}
+            title="Invoice Center"
+            sectionName="All Invoices"
+            profileData={{
+              'Total Invoices': invoices.length,
+              'Total Revenue': `$${invoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0).toLocaleString()}`,
+              'Total Profit': `$${invoices.reduce((sum, invoice) => sum + (invoice.totalProfit || 0), 0).toLocaleString()}`,
+              'Outstanding Amount': `$${invoices.reduce((sum, invoice) => sum + (invoice.totalLeft || 0), 0).toLocaleString()}`,
+              'Report Generated': format(new Date(), 'MMMM dd, yyyy')
+            }}
+          />
+        </div>
         <Table 
           data={filteredInvoices} 
           columns={columns}

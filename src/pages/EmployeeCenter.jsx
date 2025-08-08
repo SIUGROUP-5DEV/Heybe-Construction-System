@@ -9,6 +9,8 @@ import { employeesAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Footer from '../components/Footer';
+import SectionPrintOptions from '../components/SectionPrintOptions';
+import { format } from 'date-fns';
 
 const EmployeeCenter = () => {
   const { showSuccess, showError } = useToast();
@@ -211,6 +213,22 @@ const EmployeeCenter = () => {
 
       {/* Employees Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">Employees List</h2>
+          <SectionPrintOptions
+            data={filteredEmployees}
+            columns={columns}
+            title="Employee Center"
+            sectionName="All Employees"
+            profileData={{
+              'Total Employees': employees.length,
+              'Drivers': employees.filter(emp => emp.category === 'driver').length,
+              'Kirishboys': employees.filter(emp => emp.category === 'kirishboy').length,
+              'Total Employee Balance': `$${employees.reduce((sum, emp) => sum + (emp.balance || 0), 0).toLocaleString()}`,
+              'Report Generated': format(new Date(), 'MMMM dd, yyyy')
+            }}
+          />
+        </div>
         <Table 
           data={filteredEmployees} 
           columns={columns}

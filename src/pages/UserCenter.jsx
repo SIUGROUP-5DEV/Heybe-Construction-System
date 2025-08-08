@@ -8,6 +8,8 @@ import { authAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Footer from '../components/Footer';
+import SectionPrintOptions from '../components/SectionPrintOptions';
+import { format } from 'date-fns';
 
 const UserCenter = () => {
   const { showSuccess, showError } = useToast();
@@ -233,6 +235,21 @@ const UserCenter = () => {
 
       {/* Users Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">Users List</h2>
+          <SectionPrintOptions
+            data={filteredUsers}
+            columns={columns}
+            title="User Center"
+            sectionName="All Users"
+            profileData={{
+              'Total Users': users.length,
+              'Active Users': users.filter(user => user.status === 'Active').length,
+              'Administrators': users.filter(user => user.role === 'Administrator').length,
+              'Report Generated': format(new Date(), 'MMMM dd, yyyy')
+            }}
+          />
+        </div>
         <Table 
           data={filteredUsers} 
           columns={columns}

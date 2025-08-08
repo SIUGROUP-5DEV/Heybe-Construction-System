@@ -10,6 +10,7 @@ import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
+import SectionPrintOptions from '../components/SectionPrintOptions';
 
 const CarProfile = () => {
   const { id } = useParams();
@@ -128,7 +129,148 @@ const CarProfile = () => {
   });
 
   const handlePrint = () => {
-    window.print();
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank');
+    
+    // Prepare profile data
+    const profileData = {
+      'Car Name': car.carName,
+      'Number Plate': car.numberPlate || 'N/A',
+      'Current Balance': `$${(car.balance || 0).toLocaleString()}`,
+      'Driver': car.driverName || 'Not Assigned',
+      'Kirishboy': car.kirishboyName || 'Not Assigned',
+      'Status': car.status || 'Active'
+    };
+    
+    // Prepare summary data
+    const summaryData = {
+      'Total Revenue': `$${transactions.reduce((sum, t) => sum + t.total, 0).toLocaleString()}`,
+      'Total Profit': `$${transactions.reduce((sum, t) => sum + t.totalProfit, 0).toLocaleString()}`,
+      'Amount Left': `$${transactions.reduce((sum, t) => sum + t.totalLeft, 0).toLocaleString()}`,
+      'Total Payments': `$${payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
+    };
+    
+    // Combine all data for printing
+    const allData = [
+      ...transactions.map(t => ({
+        date: format(new Date(t.date), 'MMM dd, yyyy'),
+        type: 'Invoice Transaction',
+        reference: t.invoiceNo,
+        description: `${t.customer} (${t.itemsCount} items)`,
+        amount: `$${t.total.toLocaleString()}`,
+        status: t.totalLeft > 0 ? 'Pending' : 'Completed'
+      })),
+      ...payments.map(p => ({
+        date: format(new Date(p.paymentDate), 'MMM dd, yyyy'),
+        type: p.type === 'receive' ? 'Payment Received' : 'Payment Out',
+        reference: p.paymentNo || 'N/A',
+        description: p.description || 'No description',
+        amount: `${p.type === 'receive' ? '+' : '-'}$${p.amount.toLocaleString()}`,
+        status: 'Completed'
+      }))
+    ].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // Generate the HTML content
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Car Profile - ${car.carName}</title>
+          <style>
+            @page { margin: 0.5in; size: A4; }
+            body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.4; color: black; margin: 0; padding: 20px; }
+            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid black; padding-bottom: 20px; }
+            .company-name { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
+            .report-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+            .report-date { font-size: 12px; color: #666; }
+            .profile-section { margin-bottom: 30px; padding: 15px; border: 1px solid #ccc; background-color: #f9f9f9; }
+            .profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 10px; }
+            .profile-item { display: flex; flex-direction: column; }
+            .profile-label { font-size: 10px; color: #666; margin-bottom: 2px; }
+            .profile-value { font-weight: bold; font-size: 14px; }
+            .data-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            .data-table th, .data-table td { border: 1px solid black; padding: 8px; text-align: left; font-size: 11px; }
+            .data-table th { background-color: #f0f0f0; font-weight: bold; }
+            .data-table tr:nth-child(even) { background-color: #f9f9f9; }
+            .summary-section { margin-top: 30px; padding: 15px; border: 2px solid black; background-color: #f0f0f0; }
+            .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 10px; }
+            .summary-item { text-align: center; padding: 10px; border: 1px solid #ccc; background-color: white; }
+            .summary-label { font-size: 10px; color: #666; margin-bottom: 5px; }
+            .summary-value { font-weight: bold; font-size: 16px; }
+            .no-break { page-break-inside: avoid; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">Haype Construction</div>
+            <div class="report-title">Car Profile Report - ${car.carName}</div>
+            <div class="report-date">Generated on ${new Date().toLocaleDateString()}</div>
+          </div>
+          
+          <div class="profile-section no-break">
+            <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: bold;">Car Information</h3>
+            <div class="profile-grid">
+              ${Object.entries(profileData).map(([key, value]) => `
+                <div class="profile-item">
+                  <div class="profile-label">${key}</div>
+                  <div class="profile-value">${value}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          
+          <div class="no-break">
+            <h3 style="margin: 20px 0 10px 0; font-size: 16px; font-weight: bold;">Complete Transaction & Payment History</h3>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Reference</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${allData.map(item => `
+                  <tr>
+                    <td>${item.date}</td>
+                    <td>${item.type}</td>
+                    <td>${item.reference}</td>
+                    <td>${item.description}</td>
+                    <td>${item.amount}</td>
+                    <td>${item.status}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="summary-section no-break">
+            <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: bold;">Financial Summary</h3>
+            <div class="summary-grid">
+              ${Object.entries(summaryData).map(([key, value]) => `
+                <div class="summary-item">
+                  <div class="summary-label">${key}</div>
+                  <div class="summary-value">${value}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    // Write content to new window and print
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    
+    // Wait for content to load then print
+    printWindow.onload = () => {
+      printWindow.print();
+      printWindow.close();
+    };
   };
 
   const handleApplyFilter = () => {
@@ -181,7 +323,6 @@ const CarProfile = () => {
     }
     
     try {
-      // Update payment in database
       const updatedPayment = {
         ...selectedPayment,
         paymentDate: editPaymentData.paymentDate,
@@ -189,8 +330,13 @@ const CarProfile = () => {
         description: editPaymentData.description
       };
       
-      // Call API to update payment
-      await paymentsAPI.update(selectedPayment._id, updatedPayment);
+      // Use the new API method that handles balance adjustment
+      await paymentsAPI.updateWithBalanceAdjustment(
+        selectedPayment._id, 
+        updatedPayment, 
+        selectedPayment.amount, 
+        selectedPayment.customerId
+      );
       
       showSuccess('Payment Updated', 'Payment has been updated successfully');
       
@@ -215,9 +361,19 @@ const CarProfile = () => {
     if (window.confirm(`Are you sure you want to delete this payment of $${payment.amount}?`)) {
       try {
         setLoading(true);
-        await paymentsAPI.delete(payment._id);
-        console.log('✅ Payment deleted:', payment._id);
-        showSuccess('Payment Deleted', `Payment of $${payment.amount} has been deleted successfully`);
+        
+        // Use the new API method that handles balance adjustment
+        await paymentsAPI.deleteWithBalanceAdjustment(
+          payment._id,
+          payment.amount,
+          payment.customerId,
+          selectedCar
+        );
+        
+        showSuccess(
+          'Payment Deleted', 
+          `Payment of $${payment.amount.toLocaleString()} has been deleted and balances have been updated!`
+        );
         loadPayments();
       } catch (error) {
         console.error('❌ Error deleting payment:', error);
@@ -536,9 +692,48 @@ const CarProfile = () => {
         </div>
 
         {/* Tab Content */}
-        <div className="p-6">
+        <div className="p-6 tab-content">
+          {/* Section Print Options for each tab */}
+          <div className="mb-4 flex justify-end">
+            {activeTab === 'transactions' && (
+              <SectionPrintOptions
+                data={filteredTransactions}
+                columns={transactionColumns}
+                title="Car Profile"
+                sectionName="Transaction History"
+                profileData={{
+                  'Car Name': car.carName,
+                  'Number Plate': car.numberPlate || 'N/A',
+                  'Current Balance': `$${(car.balance || 0).toLocaleString()}`,
+                  'Driver': car.driverName || 'Not Assigned',
+                  'Kirishboy': car.kirishboyName || 'Not Assigned',
+                  'Status': car.status || 'Active'
+                }}
+                dateRange={dateRange}
+              />
+            )}
+            
+            {activeTab === 'payments' && (
+              <SectionPrintOptions
+                data={filteredPayments}
+                columns={paymentColumns}
+                title="Car Profile"
+                sectionName="Payment History"
+                profileData={{
+                  'Car Name': car.carName,
+                  'Number Plate': car.numberPlate || 'N/A',
+                  'Current Balance': `$${(car.balance || 0).toLocaleString()}`,
+                  'Driver': car.driverName || 'Not Assigned',
+                  'Kirishboy': car.kirishboyName || 'Not Assigned',
+                  'Status': car.status || 'Active'
+                }}
+                dateRange={dateRange}
+              />
+            )}
+          </div>
+          
           {activeTab === 'transactions' ? (
-            <div>
+            <div className="tab-content-transactions">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Transaction History</h2>
               <p className="text-gray-600 mb-4">
                 Showing {filteredTransactions.length} transactions for {car.carName}
@@ -550,7 +745,7 @@ const CarProfile = () => {
               />
             </div>
           ) : (
-            <div>
+            <div className="tab-content-payments">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment History</h2>
               <p className="text-gray-600 mb-4">
                 Showing {filteredPayments.length} payments for {car.carName}
@@ -562,6 +757,33 @@ const CarProfile = () => {
               />
             </div>
           )}
+          
+          {/* Print-only content - Show both sections when printing */}
+          <div className="hidden print:block">
+            <div className="tab-content-transactions mb-8">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4 print:text-black">Transaction History</h2>
+              <p className="text-gray-600 mb-4 print:text-black">
+                All transactions for {car.carName}
+              </p>
+              <Table 
+                data={transactions} 
+                columns={transactionColumns}
+                emptyMessage="No transactions found."
+              />
+            </div>
+            
+            <div className="tab-content-payments">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4 print:text-black">Payment History</h2>
+              <p className="text-gray-600 mb-4 print:text-black">
+                All payments for {car.carName}
+              </p>
+              <Table 
+                data={payments} 
+                columns={paymentColumns}
+                emptyMessage="No payments found."
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -723,14 +945,14 @@ const CarProfile = () => {
       )}
 
       {/* Edit Payment Modal */}
-      {selectedPayment && (
-        <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${showEditPaymentModal ? 'block' : 'hidden'}`}>
+      {showEditPaymentModal && selectedPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <CreditCard className="w-6 h-6 text-blue-600 mr-2" />
-                  <h3 className="text-lg font-semibold text-gray-900">Edit Payment</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Edit Car Payment</h3>
                 </div>
                 <button
                   onClick={() => setShowEditPaymentModal(false)}
@@ -751,7 +973,7 @@ const CarProfile = () => {
                   value={editPaymentData.paymentNo}
                   onChange={handleEditPaymentChange}
                   className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  disabled
+                  placeholder="Payment number"
                 />
               </div>
               
@@ -804,11 +1026,19 @@ const CarProfile = () => {
                   variant="outline"
                   onClick={() => setShowEditPaymentModal(false)}
                   className="flex-1"
+                  disabled={loading}
                 >
                   Cancel
                 </Button>
-                <Button type="submit" className="flex-1">
-                  Update Payment
+                <Button type="submit" className="flex-1" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Car Payment'
+                  )}
                 </Button>
               </div>
             </form>

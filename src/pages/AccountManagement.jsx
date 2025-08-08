@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Calendar, FileText, TrendingUp, Download, UserX, Car as CarIcon, UserCheck, Building2, AlertTriangle, DollarSign, RotateCcw } from 'lucide-react';
+import { Settings, Calendar, FileText, TrendingUp, Download, UserX, Car as CarIcon, UserCheck, Building2, AlertTriangle, DollarSign, RotateCcw, Filter } from 'lucide-react';
 import Button from '../components/Button';
 import FormSelect from '../components/FormSelect';
 import FormInput from '../components/FormInput';
@@ -11,11 +11,8 @@ import Footer from '../components/Footer';
 const AccountManagement = () => {
   const { showSuccess, showError, showWarning } = useToast();
   const [loading, setLoading] = useState(true);
-  const [selectedReportType, setSelectedReportType] = useState('');
-  const [selectedAccount, setSelectedAccount] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
-  const [selectedCloseType, setSelectedCloseType] = useState('');
-  const [selectedCloseAccount, setSelectedCloseAccount] = useState('');
+  const [viewPeriod, setViewPeriod] = useState('monthly');
 
   // Monthly closing state
   const [monthlyClosingLoading, setMonthlyClosingLoading] = useState(false);
@@ -33,14 +30,6 @@ const AccountManagement = () => {
   const [accountMonths, setAccountMonths] = useState([]);
   const [closedAccounts, setClosedAccounts] = useState([]);
 
-  // Reopen account states
-  const [showReopenModal, setShowReopenModal] = useState(false);
-  const [selectedReopenAccount, setSelectedReopenAccount] = useState('');
-
-  // Monthly account view modal
-  const [showMonthlyModal, setShowMonthlyModal] = useState(false);
-  const [selectedMonthlyAccount, setSelectedMonthlyAccount] = useState(null);
-
   // Load data from database
   useEffect(() => {
     loadAllData();
@@ -55,6 +44,7 @@ const AccountManagement = () => {
     // Set current month
     const currentMonthKey = currentDate.toISOString().slice(0, 7);
     setCurrentMonth(currentMonthKey);
+    setSelectedMonth(currentMonthKey);
     
     // Generate 12 months (current + 11 previous)
     for (let i = 0; i < 12; i++) {
@@ -129,69 +119,6 @@ const AccountManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getAccountOptions = () => {
-    switch (selectedReportType) {
-      case 'car':
-        return cars.map(car => ({ value: car._id, label: car.carName }));
-      case 'customer':
-        return customers.map(customer => ({ value: customer._id, label: customer.customerName }));
-      default:
-        return [];
-    }
-  };
-
-  const getCloseAccountOptions = () => {
-    switch (selectedCloseType) {
-      case 'car':
-        return cars
-          .filter(car => car.status === 'Active')
-          .map(car => ({ 
-            value: car._id, 
-            label: `${car.carName} (Balance: $${(car.balance || 0).toLocaleString()})` 
-          }));
-      case 'customer':
-        return customers
-          .filter(customer => customer.status === 'Active')
-          .map(customer => ({ 
-            value: customer._id, 
-            label: `${customer.customerName} (Balance: $${(customer.balance || 0).toLocaleString()})` 
-          }));
-      default:
-        return [];
-    }
-  };
-
-  const getSelectedAccountDetails = () => {
-    if (!selectedCloseType || !selectedCloseAccount) return null;
-
-    let account = null;
-    switch (selectedCloseType) {
-      case 'car':
-        account = cars.find(car => car._id === selectedCloseAccount);
-        break;
-      case 'customer':
-        account = customers.find(customer => customer._id === selectedCloseAccount);
-        break;
-    }
-    return account;
-  };
-
-  const handleGenerateReport = () => {
-    if (!selectedReportType || !selectedAccount || !selectedMonth) {
-      showError('Validation Error', 'Please select all required fields');
-      return;
-    }
-
-    console.log('Generating report:', {
-      type: selectedReportType,
-      account: selectedAccount,
-      month: selectedMonth
-    });
-
-    const accountName = getAccountOptions().find(opt => opt.value === selectedAccount)?.label;
-    showSuccess('Report Generated', `${selectedReportType} report for ${accountName} (${selectedMonth}) generated successfully!`);
   };
 
   const calculateMonthlyProfit = () => {
@@ -300,116 +227,9 @@ const AccountManagement = () => {
     }
   };
 
-  const handleIndividualAccountClose = async () => {
-    if (!selectedCloseType || !selectedCloseAccount) {
-      showError('Validation Error', 'Please select account type and account to close');
-      return;
-    }
-
-    const account = getSelectedAccountDetails();
-    if (!account) return;
-
-    const accountName = account.carName || account.customerName;
-    const confirmMessage = `Are you sure you want to close the account for ${accountName}?\n\n` +
-      `Account Type: ${selectedCloseType.charAt(0).toUpperCase() + selectedCloseType.slice(1)}\n` +
-      `Current Balance: $${(account.balance || 0).toLocaleString()}\n\n` +
-      `This action will:\n` +
-      `• Set the account status to "Closed"\n` +
-      `• Transfer remaining balance to company account\n` +
-      `• Archive all transaction history\n` +
-      `• Prevent future transactions\n\n` +
-      `This action cannot be undone!`;
-
-    if (window.confirm(confirmMessage)) {
-      try {
-        console.log('Closing individual account:', {
-          type: selectedCloseType,
-          accountId: selectedCloseAccount,
-          accountName: accountName,
-          balance: account.balance || 0
-        });
-
-        // Update account status to closed
-        if (selectedCloseType === 'car') {
-          await carsAPI.update(selectedCloseAccount, { status: 'Closed' });
-        } else if (selectedCloseType === 'customer') {
-          await customersAPI.update(selectedCloseAccount, { status: 'Closed' });
-        }
-        
-        showSuccess(
-          'Account Closed',
-          `Account for ${accountName} has been successfully closed! Balance of $${(account.balance || 0).toLocaleString()} transferred to company account.`
-        );
-
-        // Reset form
-        setSelectedCloseType('');
-        setSelectedCloseAccount('');
-        
-        // Reload data
-        loadAllData();
-        
-      } catch (error) {
-        console.error('❌ Error closing account:', error);
-        showError('Close Failed', 'Failed to close account. Please try again.');
-      }
-    }
-  };
-
-  const handleReopenAccount = async () => {
-    if (!selectedReopenAccount) {
-      showError('Validation Error', 'Please select an account to reopen');
-      return;
-    }
-
-    const account = closedAccounts.find(acc => acc.id === selectedReopenAccount);
-    if (!account) return;
-
-    const confirmMessage = `🔄 REOPEN CLOSED ACCOUNT\n\n` +
-      `Account: ${account.monthLabel}\n` +
-      `Original Balance: $${account.totalBalance.toLocaleString()}\n` +
-      `Original Profit: $${account.totalProfit.toLocaleString()}\n\n` +
-      `This will:\n` +
-      `• Restore the account to active status\n` +
-      `• Make all historical data accessible\n` +
-      `• Allow new transactions for this period\n\n` +
-      `Are you sure you want to reopen this account?`;
-
-    if (window.confirm(confirmMessage)) {
-      try {
-        // Update account status
-        const updatedAccounts = closedAccounts.map(acc => 
-          acc.id === selectedReopenAccount 
-            ? { ...acc, status: 'Reopened' }
-            : acc
-        );
-        setClosedAccounts(updatedAccounts);
-        
-        showSuccess(
-          'Account Reopened',
-          `${account.monthLabel} account has been successfully reopened! All historical data is now accessible.`
-        );
-
-        setShowReopenModal(false);
-        setSelectedReopenAccount('');
-        
-      } catch (error) {
-        console.error('❌ Error reopening account:', error);
-        showError('Reopen Failed', 'Failed to reopen account. Please try again.');
-      }
-    }
-  };
-
-  const handleViewMonthlyAccount = (account) => {
-    setSelectedMonthlyAccount(account);
-    setShowMonthlyModal(true);
-    
-    if (account.status === 'Active') {
-      showSuccess('Active Account', `Viewing current active month: ${account.label}`);
-    } else if (account.status === 'Closed') {
-      showSuccess('Closed Account', `Viewing closed account: ${account.monthLabel || account.label}`);
-    } else {
-      showSuccess('Monthly Account', `Viewing account: ${account.label}`);
-    }
+  const handleApplyFilter = () => {
+    const selectedMonthLabel = accountMonths.find(m => m.value === selectedMonth)?.label || 'Current Month';
+    showSuccess('Filter Applied', `Viewing ${selectedMonthLabel} account data with ${viewPeriod} view`);
   };
 
   if (loading) {
@@ -430,7 +250,7 @@ const AccountManagement = () => {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Account Management</h1>
-        <p className="text-gray-600">Manage monthly accounts, calculate profits, and generate reports</p>
+        <p className="text-gray-600">Manage monthly accounts and car account linking</p>
       </div>
 
       {/* Current Month Status with Profit Preview */}
@@ -517,524 +337,184 @@ const AccountManagement = () => {
         </Button>
       </div>
 
-      {/* Closed Accounts Management */}
+      {/* Car Account Management */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
-            <Calendar className="w-6 h-6 text-purple-600 mr-2" />
-            <h2 className="text-xl font-semibold text-gray-900">Monthly Account History</h2>
+            <CarIcon className="w-6 h-6 text-blue-600 mr-2" />
+            <h2 className="text-xl font-semibold text-gray-900">Car Account Management</h2>
           </div>
-          <Button
-            onClick={() => setShowReopenModal(true)}
-            variant="outline"
-          >
-            <RotateCcw className="w-5 h-5 mr-2" />
-            Reopen Account
-          </Button>
+          <div className="flex items-center space-x-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">View Period</label>
+              <select 
+                value={viewPeriod}
+                onChange={(e) => setViewPeriod(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="daily">Daily View</option>
+                <option value="monthly">Monthly View</option>
+                <option value="yearly">Yearly View</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Account Month</label>
+              <select 
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {accountMonths.map(month => (
+                  <option key={month.value} value={month.value}>
+                    {month.label} ({month.status})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleApplyFilter}>
+              <Filter className="w-4 h-4 mr-2" />
+              Apply Filter
+            </Button>
+          </div>
         </div>
         
-        {/* Monthly Account Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Current Active Month */}
-          {accountMonths.filter(month => month.isCurrent).map((month) => (
-            <div 
-              key={month.value} 
-              className="border-2 border-green-300 rounded-lg p-4 bg-green-50 hover:bg-green-100 transition-colors cursor-pointer"
-              onClick={() => handleViewMonthlyAccount(month)}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-green-900">{month.label}</h4>
-                  <p className="text-sm text-green-700">{month.value}</p>
-                </div>
-                <div className="text-right">
-                  <span className="inline-block px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800">
-                    Active
-                  </span>
-                  <p className="text-xs text-green-600 mt-1">Current</p>
-                </div>
-              </div>
-            </div>
-          ))}
-          
-          {/* Closed Accounts */}
-          {closedAccounts.map((account) => (
-            <div 
-              key={account.id} 
-              className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors cursor-pointer"
-              onClick={() => handleViewMonthlyAccount(account)}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-gray-900">{account.monthLabel}</h4>
-                  <p className="text-sm text-gray-600">{account.month}</p>
-                </div>
-                <div className="text-right">
-                  <span className="inline-block px-3 py-1 text-sm font-medium rounded-full bg-red-100 text-red-800">
-                    Closed
-                  </span>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Profit: ${account.totalProfit.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-          
-          {/* Other Months (Previous months without data) */}
-          {accountMonths.filter(month => !month.isCurrent).slice(0, 6).map((month) => (
-            <div 
-              key={month.value} 
-              className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors cursor-pointer opacity-75"
-              onClick={() => handleViewMonthlyAccount(month)}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-gray-900">{month.label}</h4>
-                  <p className="text-sm text-gray-600">{month.value}</p>
-                </div>
-                <div className="text-right">
-                  <span className="inline-block px-3 py-1 text-sm font-medium rounded-full bg-gray-100 text-gray-800">
-                    {month.status}
-                  </span>
-                  <p className="text-xs text-gray-500 mt-1">No data</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Individual Account Closing Section */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center mb-4">
-          <UserX className="w-6 h-6 text-red-600 mr-2" />
-          <h2 className="text-xl font-semibold text-gray-900">Individual Account Closing</h2>
-        </div>
         <p className="text-gray-600 mb-6">
-          Close individual accounts when cars are sold or customers are no longer active. 
-          This will transfer remaining balance and archive transaction history.
+          Link cars to monthly accounts automatically at month end, or manually assign them to specific months.
         </p>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <FormSelect
-            label="Account Type"
-            name="closeType"
-            value={selectedCloseType}
-            onChange={(e) => {
-              setSelectedCloseType(e.target.value);
-              setSelectedCloseAccount(''); // Reset account selection
-            }}
-            options={[
-              { value: '', label: 'Select account type' },
-              { value: 'car', label: 'Car Account' },
-              { value: 'customer', label: 'Customer Account' }
-            ]}
-          />
-
-          {selectedCloseType && (
-            <FormSelect
-              label={`Select ${selectedCloseType.charAt(0).toUpperCase() + selectedCloseType.slice(1)}`}
-              name="closeAccount"
-              value={selectedCloseAccount}
-              onChange={(e) => setSelectedCloseAccount(e.target.value)}
-              options={[
-                { value: '', label: `Choose a ${selectedCloseType}` },
-                ...getCloseAccountOptions()
-              ]}
-            />
-          )}
-        </div>
-
-        {/* Account Details Preview */}
-        {selectedCloseAccount && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <h4 className="font-medium text-red-900 mb-3">Account Closing Preview</h4>
-            {(() => {
-              const account = getSelectedAccountDetails();
-              const accountName = account?.carName || account?.customerName;
-              return account ? (
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-red-700">Account Name:</span>
-                    <span className="font-medium text-red-900">{accountName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-red-700">Account Type:</span>
-                    <span className="font-medium text-red-900">
-                      {selectedCloseType.charAt(0).toUpperCase() + selectedCloseType.slice(1)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-red-700">Current Status:</span>
-                    <span className={`font-medium px-2 py-1 rounded-full text-xs ${
-                      account.status === 'Active' 
-                        ? 'bg-green-100 text-green-800' 
-                        : account.status === 'Inactive'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {account.status || 'Active'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-red-700">Current Balance:</span>
-                    <span className="font-medium text-red-900">${(account.balance || 0).toLocaleString()}</span>
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-red-200">
-                    <p className="text-red-800 font-medium">Actions that will be performed:</p>
-                    <ul className="mt-2 space-y-1 text-red-700">
-                      <li>• Account status will be set to "Closed"</li>
-                      <li>• Balance of ${(account.balance || 0).toLocaleString()} will be transferred to company account</li>
-                      <li>• All transaction history will be archived</li>
-                      <li>• Future transactions will be prevented</li>
-                      <li>• This action cannot be undone</li>
-                    </ul>
-                  </div>
-                </div>
-              ) : null;
-            })()}
-          </div>
-        )}
-
-        <Button 
-          onClick={handleIndividualAccountClose}
-          variant="danger"
-          disabled={!selectedCloseType || !selectedCloseAccount}
-        >
-          <UserX className="w-5 h-5 mr-2" />
-          Close Account
-        </Button>
-      </div>
-
-      {/* Report Generation */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center mb-4">
-          <FileText className="w-6 h-6 text-green-600 mr-2" />
-          <h2 className="text-xl font-semibold text-gray-900">Generate Reports</h2>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <FormSelect
-            label="Report Type"
-            name="reportType"
-            value={selectedReportType}
-            onChange={(e) => {
-              setSelectedReportType(e.target.value);
-              setSelectedAccount(''); // Reset account selection
-            }}
-            options={[
-              { value: '', label: 'Select report type' },
-              { value: 'car', label: 'Car Report' },
-              { value: 'customer', label: 'Customer Report' }
-            ]}
-          />
-
-          {selectedReportType && (
-            <FormSelect
-              label={`Select ${selectedReportType.charAt(0).toUpperCase() + selectedReportType.slice(1)}`}
-              name="account"
-              value={selectedAccount}
-              onChange={(e) => setSelectedAccount(e.target.value)}
-              options={[
-                { value: '', label: `Choose a ${selectedReportType}` },
-                ...getAccountOptions()
-              ]}
-            />
-          )}
-
-          <FormSelect
-            label="Monthly Account"
-            name="month"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            options={[
-              { value: '', label: 'Select month' },
-              ...accountMonths.map(month => ({ 
-                value: month.value, 
-                label: `${month.label} (${month.status})` 
-              })),
-              ...closedAccounts.map(account => ({
-                value: account.month,
-                label: `${account.monthLabel} (${account.status})`
-              }))
-            ]}
-          />
-        </div>
-
-        <Button 
-          onClick={handleGenerateReport}
-          disabled={!selectedReportType || !selectedAccount || !selectedMonth}
-        >
-          <Download className="w-5 h-5 mr-2" />
-          Generate Report
-        </Button>
-      </div>
-
-      {/* Account Status Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center">
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <CarIcon className="w-6 h-6 text-blue-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Car Accounts</p>
-              <div className="flex items-center space-x-4">
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">{cars.length}</p>
-                  <p className="text-xs text-gray-500">Total</p>
-                </div>
-                <div>
-                  <p className="text-lg font-semibold text-green-600">
-                    {cars.filter(car => car.status === 'Active').length}
-                  </p>
-                  <p className="text-xs text-gray-500">Active</p>
-                </div>
-                <div>
-                  <p className="text-lg font-semibold text-red-600">
-                    {cars.filter(car => car.status === 'Closed').length}
-                  </p>
-                  <p className="text-xs text-gray-500">Closed</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center">
-            <div className="p-3 bg-teal-100 rounded-lg">
-              <UserCheck className="w-6 h-6 text-teal-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Customer Accounts</p>
-              <div className="flex items-center space-x-4">
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">{customers.length}</p>
-                  <p className="text-xs text-gray-500">Total</p>
-                </div>
-                <div>
-                  <p className="text-lg font-semibold text-green-600">
-                    {customers.filter(customer => customer.status === 'Active').length}
-                  </p>
-                  <p className="text-xs text-gray-500">Active</p>
-                </div>
-                <div>
-                  <p className="text-lg font-semibold text-red-600">
-                    {customers.filter(customer => customer.status === 'Closed').length}
-                  </p>
-                  <p className="text-xs text-gray-500">Closed</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Reopen Account Modal */}
-      {showReopenModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Reopen Closed Account</h3>
-              <p className="text-sm text-gray-600">Select a closed account to reopen</p>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <FormSelect
-                label="Select Closed Account"
-                value={selectedReopenAccount}
-                onChange={(e) => setSelectedReopenAccount(e.target.value)}
-                options={[
-                  { value: '', label: 'Choose a closed account' },
-                  ...closedAccounts
-                    .filter(account => account.status === 'Closed')
-                    .map(account => ({
-                      value: account.id,
-                      label: `${account.monthLabel} (Profit: $${account.totalProfit.toLocaleString()})`
-                    }))
-                ]}
-                required
-              />
-
-              <div className="flex space-x-4 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setShowReopenModal(false);
-                    setSelectedReopenAccount('');
-                  }}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handleReopenAccount} 
-                  className="flex-1"
-                  disabled={!selectedReopenAccount}
-                >
-                  <RotateCcw className="w-5 h-5 mr-2" />
-                  Reopen Account
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Monthly Account View Modal */}
-      {showMonthlyModal && selectedMonthlyAccount && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {selectedMonthlyAccount.monthLabel || selectedMonthlyAccount.label}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Account Details - {selectedMonthlyAccount.status || 'Active'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowMonthlyModal(false)}
-                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6">
-              {/* Account Status */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+        {/* Car Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {cars.map((car) => (
+            <div key={car._id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow bg-white">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <CarIcon className="w-8 h-8 text-blue-600 mr-3" />
                   <div>
-                    <h4 className="font-semibold text-gray-900">Account Status</h4>
-                    <p className="text-sm text-gray-600">
-                      {selectedMonthlyAccount.value || selectedMonthlyAccount.month}
-                    </p>
+                    <h4 className="font-semibold text-gray-900">{car.carName}</h4>
+                    <p className="text-sm text-gray-600 font-mono">{car.numberPlate || 'No Plate'}</p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    selectedMonthlyAccount.status === 'Active' || selectedMonthlyAccount.isCurrent
-                      ? 'bg-green-100 text-green-800'
-                      : selectedMonthlyAccount.status === 'Closed'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {selectedMonthlyAccount.status || (selectedMonthlyAccount.isCurrent ? 'Active' : 'Closed')}
-                  </span>
+                </div>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  car.status === 'Active' 
+                    ? 'bg-green-100 text-green-800' 
+                    : car.status === 'Maintenance'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {car.status || 'Active'}
+                </span>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Current Balance:</span>
+                  <span className="font-semibold text-blue-600">${(car.balance || 0).toLocaleString()}</span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Outstanding:</span>
+                  <span className="font-semibold text-red-600">${(car.left || 0).toLocaleString()}</span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Driver:</span>
+                  <span className="text-sm text-gray-900">{car.driverId?.employeeName || 'Not Assigned'}</span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Kirishboy:</span>
+                  <span className="text-sm text-gray-900">{car.kirishboyId?.employeeName || 'Not Assigned'}</span>
+                </div>
+                
+                <div className="pt-3 border-t border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">Net Available:</span>
+                    <span className="font-bold text-green-600">
+                      ${((car.balance || 0) - (car.left || 0)).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Monthly Account Assignment */}
+                <div className="pt-3 border-t border-gray-200">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium text-gray-700">Account Month:</span>
+                    <span className="text-sm text-blue-600">
+                      {accountMonths.find(m => m.value === selectedMonth)?.label || 'Current'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Car linked to {accountMonths.find(m => m.value === selectedMonth)?.label || 'current month'} account
+                  </div>
                 </div>
               </div>
-
-              {/* Financial Summary (for closed accounts) */}
-              {selectedMonthlyAccount.totalBalance && (
-                <div className="mb-6">
-                  <h4 className="font-semibold text-gray-900 mb-3">Financial Summary</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <p className="text-sm text-blue-700">Total Balance</p>
-                      <p className="text-xl font-bold text-blue-900">
-                        ${selectedMonthlyAccount.totalBalance.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="bg-red-50 p-4 rounded-lg">
-                      <p className="text-sm text-red-700">Total Left</p>
-                      <p className="text-xl font-bold text-red-900">
-                        ${(selectedMonthlyAccount.totalLeft || 0).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <p className="text-sm text-green-700">Final Profit</p>
-                      <p className="text-xl font-bold text-green-900">
-                        ${selectedMonthlyAccount.totalProfit.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <p className="text-sm text-gray-700">Closed Date</p>
-                      <p className="text-sm font-semibold text-gray-900">
-                        {new Date(selectedMonthlyAccount.closedDate).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Current Month Info (for active account) */}
-              {(selectedMonthlyAccount.isCurrent || selectedMonthlyAccount.status === 'Active') && (
-                <div className="mb-6">
-                  <h4 className="font-semibold text-gray-900 mb-3">Current Month Status</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <p className="text-sm text-blue-700">Current Balance</p>
-                      <p className="text-xl font-bold text-blue-900">
-                        ${profitData.totalCarBalance.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="bg-red-50 p-4 rounded-lg">
-                      <p className="text-sm text-red-700">Current Left</p>
-                      <p className="text-xl font-bold text-red-900">
-                        ${profitData.totalCarLeft.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="bg-orange-50 p-4 rounded-lg">
-                      <p className="text-sm text-orange-700">Current Payments</p>
-                      <p className="text-xl font-bold text-orange-900">
-                        ${profitData.totalCarPayments.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <p className="text-sm text-green-700">Estimated Profit</p>
-                      <p className="text-xl font-bold text-green-900">
-                        ${profitData.estimatedProfit.toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Account Actions */}
-              <div className="flex justify-end space-x-4">
-                {selectedMonthlyAccount.status === 'Closed' && (
-                  <Button
-                    onClick={() => {
-                      setSelectedReopenAccount(selectedMonthlyAccount.id);
-                      setShowMonthlyModal(false);
-                      setShowReopenModal(true);
-                    }}
-                    variant="outline"
+              
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex space-x-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => window.location.href = `/cars/${car._id}`}
                   >
-                    <RotateCcw className="w-5 h-5 mr-2" />
-                    Reopen Account
+                    View Details
                   </Button>
-                )}
-                <Button
-                  onClick={() => setShowMonthlyModal(false)}
-                  variant="outline"
-                >
-                  Close
-                </Button>
+                  <Button 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => window.location.href = `/car-reports?carId=${car._id}&carName=${car.carName}&month=${selectedMonth}`}
+                  >
+                    View Reports
+                  </Button>
+                </div>
               </div>
+            </div>
+          ))}
+        </div>
+        
+        {/* Monthly Account Summary */}
+        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h4 className="font-semibold text-blue-900 mb-3">
+            Monthly Account Summary - {accountMonths.find(m => m.value === selectedMonth)?.label}
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-lg text-center">
+              <p className="text-sm text-blue-700">Cars in Account</p>
+              <p className="text-2xl font-bold text-blue-900">{cars.length}</p>
+            </div>
+            <div className="bg-white p-4 rounded-lg text-center">
+              <p className="text-sm text-green-700">Total Fleet Balance</p>
+              <p className="text-2xl font-bold text-green-900">
+                ${cars.reduce((sum, car) => sum + (car.balance || 0), 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="bg-white p-4 rounded-lg text-center">
+              <p className="text-sm text-red-700">Total Outstanding</p>
+              <p className="text-2xl font-bold text-red-900">
+                ${cars.reduce((sum, car) => sum + (car.left || 0), 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="bg-white p-4 rounded-lg text-center">
+              <p className="text-sm text-purple-700">Estimated Profit</p>
+              <p className="text-2xl font-bold text-purple-900">
+                ${profitData.estimatedProfit.toLocaleString()}
+              </p>
             </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Instructions */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-blue-900 mb-2">Account Management Instructions</h3>
         <ul className="text-blue-800 space-y-1">
-          <li>• <strong>Monthly Closing:</strong> Calculates profit from (Car Balance - Car Left) × 15% and resets all car balances to $0</li>
           <li>• <strong>Monthly Closing:</strong> Calculates profit from Car Balance - Car Left - Car Payments = Profit (no percentage) and resets all car balances to $0</li>
           <li>• <strong>Profit Formula:</strong> Car Balance - Car Left - Car Payments = Final Profit (direct calculation, no percentage)</li>
           <li>• <strong>Car Payments:</strong> All payments made for car expenses are added to car left amount</li>
           <li>• <strong>Balance Reset:</strong> All car balances start from $0 each new month</li>
-          <li>• <strong>Closed Account Management:</strong> View and reopen previously closed monthly accounts</li>
-          <li>• <strong>Individual Account Closing:</strong> Close specific accounts when cars are sold or customers become inactive</li>
-          <li>• <strong>Account Reopening:</strong> Reopen closed accounts to access historical data and allow new transactions</li>
-          <li>• <strong>Historical Data:</strong> All closed account data is preserved and accessible</li>
+          <li>• <strong>Car Account Linking:</strong> Cars are automatically linked to monthly accounts</li>
+          <li>• <strong>Monthly Accounts:</strong> Each month has its own account for tracking car performance</li>
+          <li>• <strong>Account History:</strong> View historical monthly account data and profits</li>
           <li>• <strong>Warning:</strong> Monthly closing actions cannot be undone</li>
         </ul>
       </div>
