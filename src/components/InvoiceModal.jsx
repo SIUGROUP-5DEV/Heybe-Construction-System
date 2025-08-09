@@ -619,37 +619,6 @@ const InvoiceModal = ({ isOpen, onClose, invoiceNo, mode = 'view' }) => {
                         )}
                   <span className="text-lg font-bold text-green-600">
                     ${(formData.totalProfit || invoice.totalProfit || 0).toLocaleString()}
-                    
-                    {isEditing && (
-                      <tr>
-                        <td colSpan="9" className="py-3 px-4 text-center">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const newItem = {
-                                itemId: '',
-                                customerId: '',
-                                description: '',
-                                quantity: 1,
-                                price: 0,
-                                total: 0,
-                                leftAmount: 0,
-                                paymentMethod: 'cash'
-                              };
-                              setFormData(prev => ({
-                                ...prev,
-                                items: [...(prev.items || []), newItem]
-                              }));
-                            }}
-                          >
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add New Item Row
-                          </Button>
-                        </td>
-                      </tr>
-                    )}
                   </span>
                 </div>
               </div>
@@ -687,6 +656,36 @@ const InvoiceModal = ({ isOpen, onClose, invoiceNo, mode = 'view' }) => {
           )}
         </div>
       </div>
+      
+      {/* Add New Item Row for editing */}
+      {isEditing && (
+        <div className="p-4 border-t border-gray-200 text-center">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const newItem = {
+                itemId: '',
+                customerId: '',
+                description: '',
+                quantity: 1,
+                price: 0,
+                total: 0,
+                leftAmount: 0,
+                paymentMethod: 'cash'
+              };
+              setFormData(prev => ({
+                ...prev,
+                items: [...(prev.items || []), newItem]
+              }));
+            }}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add New Item Row
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

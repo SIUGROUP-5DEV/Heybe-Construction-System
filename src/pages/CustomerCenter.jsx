@@ -43,8 +43,7 @@ const CustomerCenter = () => {
       return matchesSearch && matchesType;
     });
     setFilteredCustomers(filtered);
-  }
-  )
+  }, [searchTerm, paymentMethodFilter, customers]);
 
   const loadCustomers = async () => {
     try {

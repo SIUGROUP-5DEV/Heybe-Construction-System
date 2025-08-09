@@ -476,8 +476,6 @@ const EmployeeProfile = () => {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="border-b border-gray-200">
           <nav className="flex space-x-8 px-6">
-           
-            
             <button
               onClick={() => setActiveTab('payments')}
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
@@ -500,7 +498,7 @@ const EmployeeProfile = () => {
         {/* Tab Content */}
         <div className="p-6">
           {activeTab === 'transactions' ? (
-             <div>
+            <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment History</h2>
               <p className="text-gray-600 mb-4">
                 Showing {filteredPaymentHistory.length} payment records
@@ -644,10 +642,6 @@ const EmployeeProfile = () => {
               </div>
             </form>
           </div>
-
-
-<Footer/>
-
         </div>
       )}
 
@@ -658,6 +652,8 @@ const EmployeeProfile = () => {
         invoiceNo={selectedInvoice}
         mode={modalMode}
       />
+      
+      <Footer/>
     </div>
   );
 };
