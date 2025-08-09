@@ -1,200 +1,155 @@
 import React, { useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from 'react-native';
-import {
-  TextInput,
-  Button,
-  Card,
-  Title,
-  Paragraph,
-  ActivityIndicator,
-  Snackbar,
-} from 'react-native-paper';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authAPI, setAuthToken, updateApiBaseUrl } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import { Building2, LogIn, Eye, EyeOff } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import Button from '../components/Button';
+import FormInput from '../components/FormInput';
+import { useToast } from '../contexts/ToastContext';
 
-const LoginScreen = ({ onLogin }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+const Login = () => {
+  const navigate = useNavigate();
+  const { login } = useAuth();
+  const { showError, showSuccess } = useToast();
+  const [formData, setFormData] = useState({
+    email: 'admin@haype.com',
+    password: 'password'
+  });
   const [loading, setLoading] = useState(false);
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
-  const showSnackbar = (message) => {
-    setSnackbarMessage(message);
-    setSnackbarVisible(true);
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.email || !formData.password) {
+      showError('Validation Error', 'Please enter both email and password');
       return;
     }
 
     setLoading(true);
-    showSnackbar('Connecting to server...');
     
     try {
-      console.log('Attempting login with:', { email });
-      const response = await authAPI.login({ email, password });
-      console.log('Login response:', response.data);
+      const result = await login(formData);
       
-      if (response.data.success) {
-        const { token } = response.data;
-        await AsyncStorage.setItem('authToken', token);
-        setAuthToken(token);
-        showSnackbar('Login successful!');
-        onLogin();
+      if (result.success) {
+        showSuccess('Login Successful', 'Welcome to Haype Construction System!');
+        navigate('/dashboard');
       } else {
-        Alert.alert('Login Failed', 'Invalid credentials');
+        showError('Login Failed', result.error || 'Invalid credentials');
       }
     } catch (error) {
       console.error('Login error:', error);
-      
-      let errorMessage = 'Login failed';
-      
-      if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Connection timeout. Server might be slow or unreachable.';
-      } else if (error.code === 'NETWORK_ERROR' || error.message.includes('Network Error')) {
-        errorMessage = 'Cannot connect to server. Please check:\n\n1. Backend server is running\n2. Your IP address in api.js\n3. Phone and computer on same WiFi';
-      } else if (error.response?.data?.error) {
-        errorMessage = error.response.data.error;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      Alert.alert('Login Error', errorMessage);
+      showError('Login Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
-      setSnackbarVisible(false);
     }
   };
 
-  // Auto-fill for testing
-  React.useEffect(() => {
-    if (__DEV__) {
-      setEmail('admin@haype.com');
-      setPassword('password');
-    }
-  }, []);
-
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Card style={styles.card}>
-          <Card.Content>
-            <Title style={styles.title}>Haype Construction</Title>
-            <Paragraph style={styles.subtitle}>Business Management System</Paragraph>
-            
-            {/* Connection Info */}
-            <Card style={styles.infoCard}>
-              <Card.Content>
-                <Paragraph style={styles.infoText}>
-                  🌐 Connected to live backend: Render
-                </Paragraph>
-                <Paragraph style={styles.infoText}>
-                  ✅ System is online and ready to use
-                </Paragraph>
-                <Paragraph style={styles.infoText}>
-                  🔐 Use: admin@haype.com / password
-                </Paragraph>
-              </Card.Content>
-            </Card>
-            
-            <TextInput
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              mode="outlined"
-              style={styles.input}
-              keyboardType="email-address"
-              autoCapitalize="none"
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="max-w-md w-full">
+        {/* Login Card */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-8 text-center">
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                <Building2 className="w-8 h-8 text-white" />
+              </div>
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-2">Haype Construction</h1>
+            <p className="text-blue-100">Business Management System</p>
+          </div>
+
+          {/* Connection Status */}
+          <div className="p-6 bg-green-50 border-b border-green-200">
+            <div className="flex items-center justify-center space-x-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm font-medium text-green-700">🌐 Connected to Live Backend</span>
+            </div>
+            <p className="text-xs text-green-600 text-center mt-1">
+              System is online and ready to use
+            </p>
+          </div>
+
+          {/* Login Form */}
+          <form onSubmit={handleSubmit} className="p-8 space-y-6">
+            <FormInput
+              label="Email Address"
+              name="email"
+              type="email"
+              value={formData.email}
+              onChange={handleChange}
               placeholder="admin@haype.com"
-              disabled={loading}
+              required
             />
-            
-            <TextInput
-              label="Password"
-              value={password}
-              onChangeText={setPassword}
-              mode="outlined"
-              secureTextEntry
-              style={styles.input}
-              placeholder="password"
-              disabled={loading}
-            />
-            
+
+            <div className="relative">
+              <FormInput
+                label="Password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-9 text-gray-400 hover:text-gray-600"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+
             <Button
-              mode="contained"
-              onPress={handleLogin}
-              style={styles.button}
+              type="submit"
+              className="w-full"
               disabled={loading}
             >
-              {loading ? <ActivityIndicator color="white" /> : 'Login'}
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Signing In...
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-5 h-5 mr-2" />
+                  Sign In
+                </>
+              )}
             </Button>
-          </Card.Content>
-        </Card>
-        
-        <Snackbar
-          visible={snackbarVisible}
-          onDismiss={() => setSnackbarVisible(false)}
-          duration={3000}
-        >
-          {snackbarMessage}
-        </Snackbar>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </form>
+
+          {/* Demo Credentials */}
+          <div className="px-8 pb-8">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-medium text-blue-900 mb-2">Demo Credentials</h4>
+              <div className="text-sm text-blue-700 space-y-1">
+                <p><strong>Email:</strong> admin@haype.com</p>
+                <p><strong>Password:</strong> password</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-8">
+          <p className="text-sm text-gray-500">
+            © 2025 Haype Construction. All rights reserved.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  card: {
-    padding: 20,
-  },
-  infoCard: {
-    marginBottom: 20,
-    backgroundColor: '#e3f2fd',
-  },
-  infoText: {
-    fontSize: 12,
-    color: '#1976d2',
-    marginBottom: 4,
-  },
-  title: {
-    textAlign: 'center',
-    marginBottom: 10,
-    color: '#2196F3',
-  },
-  subtitle: {
-    textAlign: 'center',
-    marginBottom: 30,
-    color: '#666',
-  },
-  input: {
-    marginBottom: 15,
-  },
-  button: {
-    marginTop: 10,
-    paddingVertical: 5,
-  },
-});
-
-export default LoginScreen;
+export default Login;
