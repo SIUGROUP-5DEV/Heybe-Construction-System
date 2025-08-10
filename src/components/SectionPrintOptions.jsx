@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { format } from 'date-fns';
-import { logo } from '../assets/logo.png';
+
 
 const SectionPrintOptions = ({ 
   data, 

@@ -661,7 +661,7 @@ const CreateInvoice = () => {
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <img src={logo} className="w-8 h-8 text-blue-600 mr-3" />
+              <Building2 className="w-8 h-8 text-blue-600 mr-3" />
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Haype System</h2>
                 <p className="text-gray-600">Business Management System</p>
@@ -809,7 +809,7 @@ const CreateInvoice = () => {
                         type="text"
                         value={item.description}
                         onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="Description"
                       />
                     </td>
