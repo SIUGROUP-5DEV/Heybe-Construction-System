@@ -704,7 +704,7 @@ const CreateInvoice = () => {
               value={formData.invoiceNo}
               onChange={handleFormChange}
               required
-              disabled
+              Enapble
             />
           </div>
         </div>
