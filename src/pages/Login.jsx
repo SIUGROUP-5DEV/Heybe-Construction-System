@@ -54,12 +54,12 @@ const Login = () => {
   };
 
   return (
-    <div className="fixed min-h-96 w-[1000px] rounded-2xl mt-28 ml-72 flex bg-gray-50">
+    <div className="md:fixed md:min-h-96 md:w-[1000px] rounded-2xl md:mt-28 md:ml-72 md:flex bg-gray-50">
       {/* Left Side - Logo and Branding */}
-      <div className="flex-1 flex items-center rounded-xl justify-center bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 relative overflow-hidden">
+      <div className="hidden md:block flex-1 flex items-center rounded-xl justify-center bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 relative overflow-hidden">
         {/* Background Pattern */}
         <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/20 to-transparent"></div>
+          <div className=" absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/20 to-transparent"></div>
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-white/5 rounded-full blur-3xl"></div>
           <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-white/5 rounded-full blur-3xl"></div>
         </div>
