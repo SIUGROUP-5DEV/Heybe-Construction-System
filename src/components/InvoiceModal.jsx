@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Building2, Car, User, Package, Calendar, DollarSign, Edit, Save, Trash2 } from 'lucide-react';
+import { X, Building2, Car, User, Package, Calendar, DollarSign, Edit, Save, Trash2, Plug, Plus } from 'lucide-react';
 import Button from './Button';
 import FormInput from './FormInput';
 import FormSelect from './FormSelect';

@@ -50,9 +50,7 @@ const CreateInvoice = () => {
   // New item form data
   const [newItemData, setNewItemData] = useState({
     itemName: '',
-    price: '',
-    driverPrice: '',
-    kirishboyPrice: ''
+   
   });
 
   // New customer form data
@@ -188,7 +186,7 @@ const CreateInvoice = () => {
       
       const itemToCreate = {
         itemName: newItemData.itemName.trim(),
-        price: parseFloat(newItemData.price) || 0
+        
       };
       
       console.log('🔄 Creating new item:', itemToCreate);
@@ -199,7 +197,7 @@ const CreateInvoice = () => {
       const newItem = {
         _id: response.data._id || response.data.itemId || Date.now().toString(),
         itemName: itemToCreate.itemName,
-        price: itemToCreate.price
+        
       };
       
       setItems(prev => [...prev, newItem]);
@@ -216,7 +214,7 @@ const CreateInvoice = () => {
       // Reset form and close modal
       setNewItemData({
         itemName: '',
-        price: ''
+        
       });
       setShowAddItemModal(false);
       setCurrentItemIndex(null);
@@ -945,21 +943,7 @@ const CreateInvoice = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Price *</label>
-                <input
-                  type="number"
-                  name="price"
-                  value={newItemData.price}
-                  onChange={handleNewItemChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="0.00"
-                  min="0"
-                  step="0.01"
-                  required
-                />
-              </div>
-
+              
 
               <div className="flex space-x-4 pt-4">
                 <Button

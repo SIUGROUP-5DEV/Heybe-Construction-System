@@ -299,7 +299,7 @@ const Dashboard = () => {
                 <div className="flex items-center">
                   <AlertCircle className="w-6 h-6 text-orange-600 mr-2" />
                   <div>
-                    <p className="text-sm text-gray-600">Left  Amount</p>
+                    <p className="text-sm text-gray-600">Left Amount</p>
                     <p className="text-xl font-bold text-orange-600">
                       ${selectedCarData.carLeft.toLocaleString()}
                     </p>

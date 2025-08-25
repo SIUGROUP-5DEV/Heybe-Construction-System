@@ -613,7 +613,7 @@ const CarProfile = () => {
           
           <div>
             <p className="text-sm text-gray-600">Balance</p>
-            <p className="text-lg font-semibold text-green-600">${(car.balance || 0).toLocaleString()}</p>
+            <p className="text-lg font-semibold text-green-600">${filteredTransactions.reduce((sum, t) => sum + t.total, 0).toLocaleString()}</p>
           </div>
           
           <div>

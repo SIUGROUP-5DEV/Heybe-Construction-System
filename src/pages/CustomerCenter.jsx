@@ -229,6 +229,7 @@ const CustomerCenter = () => {
               'Cash Customers': customers.filter(customer => (customer.balance || 0) === 0).length,
               'Credit Customers': customers.filter(customer => (customer.balance || 0) > 0).length,
               'Total Outstanding': `$${customers.reduce((sum, customer) => sum + (customer.balance || 0), 0).toLocaleString()}`,
+              
               'Report Generated': format(new Date(), 'MMMM dd, yyyy')
             }}
           />

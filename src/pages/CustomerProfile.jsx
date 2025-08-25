@@ -196,7 +196,7 @@ const CustomerProfile = () => {
     const profileData = {
       'Customer Name': customer.customerName,
       'Phone Number': customer.phoneNumber || 'N/A',
-      'Current Balance': `$${(customer.balance || 0).toLocaleString()}`,
+      'Current Balance': `$${finalBalance.toLocaleString()}`,
       'Customer Type': (customer.balance || 0) === 0 ? 'Cash Customer' : 'Credit Customer'
     };
     
@@ -865,7 +865,7 @@ const CustomerProfile = () => {
             <DollarSign className="w-12 h-12 text-red-600 mr-4" />
             <div>
               <p className="text-sm text-gray-600">Current Balance</p>
-              <p className="text-lg font-semibold text-red-600">${(customer.balance || 0).toLocaleString()}</p>
+              <p className="text-lg font-semibold text-red-600">${finalBalance.toLocaleString()}</p>
             </div>
           </div>
           
@@ -975,7 +975,7 @@ const CustomerProfile = () => {
                 profileData={{
                   'Customer Name': customer.customerName,
                   'Phone Number': customer.phoneNumber || 'N/A',
-                  'Current Balance': `$${(customer.balance || 0).toLocaleString()}`,
+                  'Current Balance': `$${finalBalance.toLocaleString()}`,
                   'Customer Type': (customer.balance || 0) === 0 ? 'Cash Customer' : 'Credit Customer',
                   'Total Credit Transactions': filteredTransactions.length,
                   'Total Payments': filteredPayments.length
@@ -993,7 +993,7 @@ const CustomerProfile = () => {
                 profileData={{
                   'Customer Name': customer.customerName,
                   'Phone Number': customer.phoneNumber || 'N/A',
-                  'Current Balance': `$${(customer.balance || 0).toLocaleString()}`,
+                  'Current Balance': `$${finalBalance.toLocaleString()}`,
                   'Customer Type': (customer.balance || 0) === 0 ? 'Cash Customer' : 'Credit Customer'
                 }}
                 dateRange={dateRange}
@@ -1009,7 +1009,7 @@ const CustomerProfile = () => {
                 profileData={{
                   'Customer Name': customer.customerName,
                   'Phone Number': customer.phoneNumber || 'N/A',
-                  'Current Balance': `$${(customer.balance || 0).toLocaleString()}`,
+                  'Current Balance': `$${finalBalance.toLocaleString()}`,
                   'Customer Type': (customer.balance || 0) === 0 ? 'Cash Customer' : 'Credit Customer'
                 }}
                 dateRange={dateRange}
@@ -1031,7 +1031,7 @@ const CustomerProfile = () => {
               />
               
               {/* Balance Summary */}
-              <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-6 summary-section">
+              <div className=" grid-cols-3 mt-6 bg-blue-50 border border-blue-200 rounded-lg p-6 summary-section">
                 <h3 className="text-lg font-semibold text-blue-900 mb-4">Balance Summary</h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="bg-white p-4 rounded-lg text-center">
@@ -1046,10 +1046,7 @@ const CustomerProfile = () => {
                     <p className="text-sm text-blue-700">Final Balance</p>
                     <p className="text-xl font-bold text-blue-600">${finalBalance.toLocaleString()}</p>
                   </div>
-                  <div className="bg-white p-4 rounded-lg text-center">
-                    <p className="text-sm text-gray-700">Database Balance</p>
-                    <p className="text-xl font-bold text-gray-900">${(customer.balance || 0).toLocaleString()}</p>
-                  </div>
+                 
                 </div>
               </div>
             </div>
@@ -1114,10 +1111,7 @@ const CustomerProfile = () => {
                     <p className="text-sm text-black">Final Balance</p>
                     <p className="text-xl font-bold text-black">${finalBalance.toLocaleString()}</p>
                   </div>
-                  <div className="bg-white p-4 rounded-lg text-center border border-gray-300">
-                    <p className="text-sm text-black">Database Balance</p>
-                    <p className="text-xl font-bold text-black">${(customer.balance || 0).toLocaleString()}</p>
-                  </div>
+                
                 </div>
               </div>
             </div>

@@ -692,9 +692,9 @@ const Payments = () => {
                 name="paymentNo"
                 value={paymentOutFormData.paymentNo}
                 onChange={handlePaymentOutChange}
-                placeholder="e.g., PYN-0001"
+                placeholder="e.g., PYN-001"
                 required
-                disabled
+                en
               />
 
               <FormInput
