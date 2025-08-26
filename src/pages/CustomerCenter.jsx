@@ -21,6 +21,12 @@ const CustomerCenter = () => {
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+const [payments, setPayments] = useState([]);
+
+  const totalCredited = transactions.reduce((sum, t) => sum + t.total, 0);
+  const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
+  const finalBalance = Math.max(0, totalCredited - totalPayments);
 
   // Load customers from database
   useEffect(() => {
@@ -228,7 +234,7 @@ const CustomerCenter = () => {
               'Total Customers': customers.length,
               'Cash Customers': customers.filter(customer => (customer.balance || 0) === 0).length,
               'Credit Customers': customers.filter(customer => (customer.balance || 0) > 0).length,
-              'Total Outstanding': `$${customers.reduce((sum, customer) => sum + (customer.balance || 0), 0).toLocaleString()}`,
+                'Current Balance': `$${finalBalance.toLocaleString()}`,
               
               'Report Generated': format(new Date(), 'MMMM dd, yyyy')
             }}

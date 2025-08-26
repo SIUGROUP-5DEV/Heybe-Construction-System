@@ -330,7 +330,7 @@ const CustomerProfile = () => {
       dateRange
     });
     
-    showSuccess('Filter Applied', `Found ${filteredCombinedHistory.length} records for ${customer?.customerName}`);
+    
   };
 
   const handleViewInvoice = (invoiceNo) => {

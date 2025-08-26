@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { format } from 'date-fns';
-
+import logo from '../assets/sitelogo.png'
 
 const SectionPrintOptions = ({ 
   data, 
@@ -15,14 +15,30 @@ const SectionPrintOptions = ({
   dateRange = null,
   className = ""
 }) => {
-  const addCompanyHeader = (doc, title, dateRange) => {
-    // Company Logo (using Building2 icon as placeholder)
-    doc.setFillColor(37, 99, 235); // Blue color
-    doc.rect(20, 15, 15, 15, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(12);
-    doc.text('HC', 27.5, 25);
+  // Calculate balance summary for the current data
+  const calculateBalanceSummary = () => {
+    const totalAmount = data.reduce((sum, row) => {
+      const amount = row.total || row.amount || 0;
+      return sum + amount;
+    }, 0);
     
+    const totalLeft = data.reduce((sum, row) => {
+      const left = row.totalLeft || row.leftAmount || 0;
+      return sum + left;
+    }, 0);
+    
+    const finalBalance = totalAmount - totalLeft;
+    
+    return { totalAmount, totalLeft, finalBalance };
+  };
+
+  const addCompanyHeader = (doc, title, dateRange) => {
+   // gudaha handleSectionPDF ama addCompanyHeader
+const img = new Image();
+img.src = logo;
+img.onload = () => {
+  doc.addImage(img, 'PNG', 10, 10, 25, 25); // x, y, width, height
+};
     // Company Name
     doc.setFontSize(24);
     doc.setTextColor(37, 99, 235);
@@ -47,12 +63,22 @@ const SectionPrintOptions = ({
     
     // Generation Date
     doc.setFontSize(10);
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 20, 59);
+ doc.text(`Generated on: ${format(new Date(), 'MMM dd, yyyy')}`, 20, 59);
+
+
     
     return 70; // Return Y position for content
   };
 
   const handleSectionPrint = () => {
+    const balanceSummary = calculateBalanceSummary();
+    
+    // Filter out Actions and Profit columns for printing
+    const printColumns = columns.filter(col => 
+      !col.header.toLowerCase().includes('action') && 
+      !col.header.toLowerCase().includes('profit')
+    );
+    
     const printWindow = window.open('', '_blank');
     
     // Generate HTML for printing with company branding
@@ -84,15 +110,8 @@ const SectionPrintOptions = ({
             .logo {
               width: 60px;
               height: 60px;
-              background: linear-gradient(135deg, #2563eb, #1d4ed8);
-              border-radius: 12px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: white;
-              font-size: 24px;
-              font-weight: bold;
-              margin-right: 20px;
+             
+            
             }
             .company-info h1 { 
               font-size: 28px; 
@@ -135,14 +154,14 @@ const SectionPrintOptions = ({
               font-size: 16px;
             }
             .profile-section { 
-              margin-bottom: 25px; 
+              margin-bottom: 2px; 
               padding: 15px; 
               border: 1px solid #d1d5db; 
               background: linear-gradient(to right, #f8fafc, #f1f5f9);
               border-radius: 8px;
             }
             .profile-grid { 
-              display: grid; 
+              display: flex; 
               grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
               gap: 15px; 
               margin-top: 10px; 
@@ -167,7 +186,7 @@ const SectionPrintOptions = ({
             .data-table { 
               width: 100%; 
               border-collapse: collapse; 
-              margin: 20px 0;
+              margin-top: 5px;
               background: white;
             }
             .data-table th { 
@@ -236,14 +255,18 @@ const SectionPrintOptions = ({
         </head>
         <body>
           <div class="header">
-           img src={logo} alt="compnay logo" class="logo" />
+          <div class="logo">
+  <img src="${logo}" alt="Company Logo" style="width:420px;height:420px; margin-top:-180px; margin-left:-70px;" />
+</div>
             <div class="company-info">
-              <h1>Haype Construction</h1>
-              <p>Business Management System</p>
+             
+              
             </div>
             <div class="report-info">
               <p style="font-size: 12px; color: #6b7280;">Report Generated</p>
-              <p style="font-weight: bold; color: #1f2937;">${new Date().toLocaleDateString()}</p>
+            <p style="font-weight: bold; color: #1f2937;">${format(new Date(), 'MMM dd, yyyy')}</p>
+
+
             </div>
           </div>
           
@@ -271,17 +294,17 @@ const SectionPrintOptions = ({
           ` : ''}
           
           <div class="no-break">
-            <h3 class="section-title">${sectionName} (${data.length} records)</h3>
+          
             <table class="data-table">
               <thead>
                 <tr>
-                  ${columns.map(col => `<th>${col.header}</th>`).join('')}
+                  ${printColumns.map(col => `<th>${col.header}</th>`).join('')}
                 </tr>
               </thead>
               <tbody>
                 ${data.map(row => `
                   <tr>
-                    ${columns.map(col => {
+                    ${printColumns.map(col => {
                       let value = row[col.accessor];
                       
                       // Handle nested objects
@@ -300,9 +323,18 @@ const SectionPrintOptions = ({
                       }
                       
                       // Format dates
-                      if (col.accessor.includes('Date') && value) {
-                        value = format(new Date(value), 'MMM dd, yyyy');
-                      }
+                   
+
+// Handle nested objects
+if (col.accessor && col.accessor.includes('.')) {
+  const keys = col.accessor.split('.');
+  value = keys.reduce((obj, key) => obj?.[key], row);
+}
+
+// Format dates (waxaad ka dhigtaa mid guud)
+if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('date')) {
+  value = format(new Date(value), 'dd-MM-yyyy');
+}
                       
                       // Format currency
                       if (col.accessor.includes('balance') || col.accessor.includes('amount') || col.accessor.includes('total') || col.accessor.includes('price')) {
@@ -319,25 +351,27 @@ const SectionPrintOptions = ({
             </table>
           </div>
           
-          <div class="summary-section no-break">
-            <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: bold; color: #1e40af;">Summary Statistics</h3>
-            <div class="summary-grid">
-              <div class="summary-item">
-                <div class="summary-label">Total Records</div>
-                <div class="summary-value">${data.length}</div>
+          <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+            <div style="border: 2px solid #2563eb; background: #eff6ff; padding: 15px; border-radius: 8px; min-width: 200px;">
+              <h4 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #1e40af; text-align: center;">Balance Summary</h4>
+              <div style="text-align: right; flex  line-height: 1.6;">
+                <div style="margin-bottom: 8px;">
+                  <span style="font-size: 12px; color: #6b7280;">Total Amount:</span><br>
+                  <span style="font-size: 16px; font-weight: bold; color: #059669;">$${balanceSummary.totalAmount.toLocaleString()}</span>
+                </div>
+                <div style="margin-bottom: 8px;">
+                  <span style="font-size: 12px; color: #6b7280;">Total Amount Left:</span><br>
+                  <span style="font-size: 16px; font-weight: bold; color: #dc2626;">$${balanceSummary.totalLeft.toLocaleString()}</span>
+                </div>
+                <div style="border-top: 1px solid #bfdbfe; padding-top: 8px;">
+                  <span style="font-size: 12px; color: #6b7280;">Final Balance:</span><br>
+                  <span style="font-size: 18px; font-weight: bold; color: #1e40af;">$${balanceSummary.finalBalance.toLocaleString()}</span>
+                </div>
               </div>
-              <div class="summary-item">
-                <div class="summary-label">Report Section</div>
-                <div class="summary-value">${sectionName}</div>
-              </div>
-              <div class="summary-item">
-                <div class="summary-label">Generated By</div>
-                <div class="summary-value">Haype System</div>
-              </div>
-              <div class="summary-item">
-                <div class="summary-label">Print Date</div>
-                <div class="summary-value">${format(new Date(), 'MMM dd, yyyy')}</div>
-              </div>
+            </div>
+          </div>
+          
+         
             </div>
         </body>
       </html>
@@ -354,6 +388,14 @@ const SectionPrintOptions = ({
 
   const handleSectionExcel = () => {
     try {
+      const balanceSummary = calculateBalanceSummary();
+      
+      // Filter out Actions and Profit columns for Excel
+      const excelColumns = columns.filter(col => 
+        !col.header.toLowerCase().includes('action') && 
+        !col.header.toLowerCase().includes('profit')
+      );
+      
       // Prepare data for Excel with date range info
       const excelData = [];
       
@@ -367,8 +409,8 @@ const SectionPrintOptions = ({
           [columns[0]?.header || 'Field']: `PERIOD: ${format(dateRange.from, 'MMM dd, yyyy')} - ${format(dateRange.to, 'MMM dd, yyyy')}` 
         });
       }
-      
-      excelData.push({ [columns[0]?.header || 'Field']: `GENERATED: ${new Date().toLocaleDateString()}` });
+      excelData.push({ [columns[0]?.header || 'Field']: `GENERATED: ${format(new Date(), 'MMM dd, yyyy')}` });
+
       excelData.push({ [columns[0]?.header || 'Field']: '' });
       
       // Add profile data if available
@@ -387,7 +429,7 @@ const SectionPrintOptions = ({
       // Add data
       const dataRows = data.map(row => {
         const excelRow = {};
-        columns.forEach(col => {
+        excelColumns.forEach(col => {
           if (col.accessor && col.header) {
             let value = row[col.accessor];
             
@@ -418,6 +460,13 @@ const SectionPrintOptions = ({
       });
       
       excelData.push(...dataRows);
+      
+      // Add balance summary
+      excelData.push({ [excelColumns[0]?.header || 'Field']: '' });
+      excelData.push({ [excelColumns[0]?.header || 'Field']: 'BALANCE SUMMARY' });
+      excelData.push({ [excelColumns[0]?.header || 'Field']: 'Total Amount', [excelColumns[1]?.header || 'Value']: `$${balanceSummary.totalAmount.toLocaleString()}` });
+      excelData.push({ [excelColumns[0]?.header || 'Field']: 'Total Amount Left', [excelColumns[1]?.header || 'Value']: `$${balanceSummary.totalLeft.toLocaleString()}` });
+      excelData.push({ [excelColumns[0]?.header || 'Field']: 'Final Balance', [excelColumns[1]?.header || 'Value']: `$${balanceSummary.finalBalance.toLocaleString()}` });
 
       // Create workbook and worksheet
       const wb = XLSX.utils.book_new();
@@ -431,7 +480,7 @@ const SectionPrintOptions = ({
       XLSX.utils.book_append_sheet(wb, ws, sectionName);
 
       // Generate filename with timestamp and date range
-      const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm');
+      const timestamp = format(new Date(), 'yyyy-MM-dd');
       const dateRangeStr = dateRange ? 
         `_${format(dateRange.from, 'MMM-dd')}_to_${format(dateRange.to, 'MMM-dd')}` : '';
       const filename = `${sectionName}_${timestamp}${dateRangeStr}.xlsx`;
@@ -448,6 +497,14 @@ const SectionPrintOptions = ({
 
   const handleSectionPDF = () => {
     try {
+      const balanceSummary = calculateBalanceSummary();
+      
+      // Filter out Actions and Profit columns for PDF
+      const pdfColumns = columns.filter(col => 
+        !col.header.toLowerCase().includes('action') && 
+        !col.header.toLowerCase().includes('profit')
+      );
+      
       const doc = new jsPDF('l', 'mm', 'a4');
       
       // Add company header and get Y position
@@ -478,9 +535,9 @@ const SectionPrintOptions = ({
       }
 
       // Prepare table data
-      const tableColumns = columns.map(col => col.header);
+      const tableColumns = pdfColumns.map(col => col.header);
       const tableRows = data.map(row => {
-        return columns.map(col => {
+        return pdfColumns.map(col => {
           let value = row[col.accessor];
           
           // Handle nested objects
@@ -526,6 +583,29 @@ const SectionPrintOptions = ({
         },
         margin: { left: 20, right: 20 }
       });
+      
+      // Add balance summary box
+      const finalY = doc.lastAutoTable.finalY + 15;
+      
+      // Draw balance summary box
+      doc.setFillColor(239, 246, 255); // Light blue background
+      doc.rect(doc.internal.pageSize.width - 80, finalY, 60, 35, 'F');
+      doc.setDrawColor(37, 99, 235); // Blue border
+      doc.rect(doc.internal.pageSize.width - 80, finalY, 60, 35, 'S');
+      
+      // Add balance summary text
+      doc.setFontSize(10);
+      doc.setTextColor(30, 64, 175);
+      doc.text('Balance Summary', doc.internal.pageSize.width - 50, finalY + 8, { align: 'center' });
+      
+      doc.setFontSize(8);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`Total Amount: $${balanceSummary.totalAmount.toLocaleString()}`, doc.internal.pageSize.width - 75, finalY + 15);
+      doc.text(`Total Left: $${balanceSummary.totalLeft.toLocaleString()}`, doc.internal.pageSize.width - 75, finalY + 22);
+      
+      doc.setFontSize(9);
+      doc.setTextColor(30, 64, 175);
+      doc.text(`Final Balance: $${balanceSummary.finalBalance.toLocaleString()}`, doc.internal.pageSize.width - 75, finalY + 30);
 
       // Generate filename
       const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm');

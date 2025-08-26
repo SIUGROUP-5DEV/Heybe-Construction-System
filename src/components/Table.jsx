@@ -17,7 +17,9 @@ const Table = ({ data, columns, emptyMessage = 'No data available' }) => {
             {columns.map((column, index) => (
               <th
                 key={index}
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                  column.header.toLowerCase().includes('action') ? 'print:hidden table-actions' : ''
+                }`}
               >
                 {column.header}
               </th>
