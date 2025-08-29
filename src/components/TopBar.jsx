@@ -1,12 +1,16 @@
 import React from 'react';
 import { useSidebar } from '../contexts/SidebarContext';
-import { Menu, Bell, User } from 'lucide-react';
+import { Menu, Bell, User, Database } from 'lucide-react';
+import { useState } from 'react';
+import BackupRestoreModal from './BackupRestoreModal';
 
 const TopBar = () => {
   const { toggleSidebar } = useSidebar();
+  const [showBackupModal, setShowBackupModal] = useState(false);
 
   return (
-    <header className="bg-white border-b border-gray-200 px-6 py-4 print:hidden">
+    <>
+      <header className="bg-white border-b border-gray-200 px-6 py-4 print:hidden">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           <button
@@ -31,7 +35,22 @@ const TopBar = () => {
           </div>
         </div>
       </div>
-    </header>
+            <button 
+              onClick={() => setShowBackupModal(true)}
+              className="p-2 rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
+              title="Backup & Restore"
+            >
+              <Database className="w-6 h-6" />
+            </button>
+            
+      </header>
+      
+      {/* Backup & Restore Modal */}
+      <BackupRestoreModal
+        isOpen={showBackupModal}
+        onClose={() => setShowBackupModal(false)}
+      />
+    </>
   );
 };
 

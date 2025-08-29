@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://haype-server.onrender.com/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5009/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -190,6 +190,12 @@ export const paymentsAPI = {
 // Dashboard API
 export const dashboardAPI = {
   getData: () => api.get('/dashboard'),
+};
+
+// Backup & Restore API
+export const backupAPI = {
+  exportAll: () => api.get('/backup/export'),
+  importAll: (backupData) => api.post('/backup/import', backupData),
 };
 
 export default api;

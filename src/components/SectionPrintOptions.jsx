@@ -6,6 +6,8 @@ import 'jspdf-autotable';
 import { format } from 'date-fns';
 import logo from '../assets/sitelogo.png'
 
+
+
 const SectionPrintOptions = ({ 
   data, 
   columns, 
@@ -22,23 +24,19 @@ const SectionPrintOptions = ({
       return sum + amount;
     }, 0);
     
-    const totalLeft = data.reduce((sum, row) => {
-      const left = row.totalLeft || row.leftAmount || 0;
+    const totalPayments = data.reduce((sum, row) => {
+      const left = row.totalPayments || row.leftAmount || 0;
       return sum + left;
     }, 0);
     
-    const finalBalance = totalAmount - totalLeft;
+    const finalBalance = totalAmount - totalPayments;
     
-    return { totalAmount, totalLeft, finalBalance };
+    return { totalAmount, totalPayments, finalBalance };
   };
 
   const addCompanyHeader = (doc, title, dateRange) => {
-   // gudaha handleSectionPDF ama addCompanyHeader
-const img = new Image();
-img.src = logo;
-img.onload = () => {
-  doc.addImage(img, 'PNG', 10, 10, 25, 25); // x, y, width, height
-};
+  doc.addImage(logo, 'PNG', 10, 10, 25, 25);
+
     // Company Name
     doc.setFontSize(24);
     doc.setTextColor(37, 99, 235);
@@ -103,7 +101,7 @@ img.onload = () => {
             .header { 
               display: flex;
               align-items: center;
-              margin-bottom: 30px; 
+              margin-bottom: 8px; 
               border-bottom: 3px solid #2563eb; 
               padding-bottom: 20px; 
             }
@@ -116,7 +114,7 @@ img.onload = () => {
             .company-info h1 { 
               font-size: 28px; 
               font-weight: bold; 
-              margin: 0 0 5px 0; 
+              margin: 0 0 1px 0; 
               color: #2563eb;
             }
             .company-info p { 
@@ -131,7 +129,7 @@ img.onload = () => {
             .report-title { 
               font-size: 20px; 
               font-weight: bold; 
-              margin: 20px 0 10px 0; 
+              margin: 0px 0 10px 0; 
               color: #1f2937;
             }
             .date-range {
@@ -139,7 +137,7 @@ img.onload = () => {
               border: 1px solid #bfdbfe;
               border-radius: 8px;
               padding: 12px;
-              margin: 15px 0;
+              margin: 7px 0;
               text-align: center;
             }
             .date-range h3 {
@@ -155,14 +153,14 @@ img.onload = () => {
             }
             .profile-section { 
               margin-bottom: 2px; 
-              padding: 15px; 
+              padding: 8px; 
               border: 1px solid #d1d5db; 
               background: linear-gradient(to right, #f8fafc, #f1f5f9);
               border-radius: 8px;
             }
             .profile-grid { 
               display: flex; 
-              grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+              grid grid-cols-1 md:grid-cols-4 gap-6;
               gap: 15px; 
               margin-top: 10px; 
             }
@@ -216,19 +214,23 @@ img.onload = () => {
               background: linear-gradient(to right, #eff6ff, #dbeafe);
               border-radius: 8px;
             }
-            .summary-grid { 
-              display: grid; 
-              grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); 
-              gap: 15px; 
-              margin-top: 15px; 
-            }
-            .summary-item { 
-              text-align: center; 
-              padding: 15px; 
-              border: 1px solid #bfdbfe; 
-              background: white;
-              border-radius: 6px;
-            }
+           .summary-grid { 
+.summary-grid { 
+  display: flex; 
+  flex-wrap: wrap;       /* items-ku waxay hoos ugu dhacayaan saf cusub haddii boosku ka yaraado */
+  gap: 2px; 
+  margin-top: 10px; 
+}
+
+.summary-item { 
+  flex: 1 1 150px;       /* ugu yaraan 150px, haddii boos badan jiro waxay ku fidi doonaan */
+  text-align: center; 
+  padding: 10px; 
+  border: 1px solid #ccc; 
+  background-color: white; 
+}
+
+
             .summary-label { 
               font-size: 11px; 
               color: #6b7280; 
@@ -270,7 +272,7 @@ img.onload = () => {
             </div>
           </div>
           
-          <div class="report-title">${title} - ${sectionName}</div>
+          
           
           ${dateRange ? `
             <div class="date-range">
@@ -335,6 +337,8 @@ if (col.accessor && col.accessor.includes('.')) {
 if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('date')) {
   value = format(new Date(value), 'dd-MM-yyyy');
 }
+
+
                       
                       // Format currency
                       if (col.accessor.includes('balance') || col.accessor.includes('amount') || col.accessor.includes('total') || col.accessor.includes('price')) {
@@ -361,7 +365,7 @@ if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('d
                 </div>
                 <div style="margin-bottom: 8px;">
                   <span style="font-size: 12px; color: #6b7280;">Total Amount Left:</span><br>
-                  <span style="font-size: 16px; font-weight: bold; color: #dc2626;">$${balanceSummary.totalLeft.toLocaleString()}</span>
+                  <span style="font-size: 16px; font-weight: bold; color: #dc2626;">$${balanceSummary.totalPayments.toLocaleString()}</span>
                 </div>
                 <div style="border-top: 1px solid #bfdbfe; padding-top: 8px;">
                   <span style="font-size: 12px; color: #6b7280;">Final Balance:</span><br>
@@ -465,10 +469,10 @@ if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('d
       excelData.push({ [excelColumns[0]?.header || 'Field']: '' });
       excelData.push({ [excelColumns[0]?.header || 'Field']: 'BALANCE SUMMARY' });
       excelData.push({ [excelColumns[0]?.header || 'Field']: 'Total Amount', [excelColumns[1]?.header || 'Value']: `$${balanceSummary.totalAmount.toLocaleString()}` });
-      excelData.push({ [excelColumns[0]?.header || 'Field']: 'Total Amount Left', [excelColumns[1]?.header || 'Value']: `$${balanceSummary.totalLeft.toLocaleString()}` });
+      excelData.push({ [excelColumns[0]?.header || 'Field']: 'Total MKPYN Payments', [excelColumns[1]?.header || 'Value']: `$${balanceSummary.totalPayments.toLocaleString()}` });
       excelData.push({ [excelColumns[0]?.header || 'Field']: 'Final Balance', [excelColumns[1]?.header || 'Value']: `$${balanceSummary.finalBalance.toLocaleString()}` });
 
-      // Create workbook and worksheet
+      // Create workbook and worksheettotalPayments
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(excelData);
 
@@ -601,7 +605,7 @@ if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('d
       doc.setFontSize(8);
       doc.setTextColor(0, 0, 0);
       doc.text(`Total Amount: $${balanceSummary.totalAmount.toLocaleString()}`, doc.internal.pageSize.width - 75, finalY + 15);
-      doc.text(`Total Left: $${balanceSummary.totalLeft.toLocaleString()}`, doc.internal.pageSize.width - 75, finalY + 22);
+      doc.text(`Total MKPYN Payments: $${balanceSummary.totalPayments.toLocaleString()}`, doc.internal.pageSize.width - 75, finalY + 22);
       
       doc.setFontSize(9);
       doc.setTextColor(30, 64, 175);

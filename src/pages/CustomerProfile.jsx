@@ -127,30 +127,24 @@ const CustomerProfile = () => {
     }
   };
 
-  const createCombinedHistory = () => {
-    // Combine transactions and payments, sort by date
-    const combined = [
-      ...transactions.map(t => ({ ...t, type: 'transaction' })),
-      ...payments.map(p => ({ ...p, type: 'payment' }))
-    ].sort((a, b) => new Date(a.date || a.paymentDate) - new Date(b.date || b.paymentDate));
+const createCombinedHistory = () => {
+  const combined = [
+    ...transactions.map(t => ({ ...t, type: 'transaction' })),
+    ...payments.map(p => ({ ...p, type: 'payment' }))
+  ].sort((a, b) => new Date(a.date || a.paymentDate) - new Date(b.date || b.paymentDate));
 
-    // Calculate running balance
-    let runningBalance = 0;
-    const withRunningBalance = combined.map(item => {
-      if (item.type === 'transaction') {
-        runningBalance += item.total || 0;
-      } else if (item.type === 'payment') {
-        runningBalance -= item.amount || 0;
-      }
-      
-      return {
-        ...item,
-        runningBalance: Math.max(0, runningBalance)
-      };
-    });
+  let runningBalance = 0;
+  const withRunningBalance = combined.map(item => {
+    if (item.type === 'transaction') {
+      runningBalance += item.total || 0;
+    } else if (item.type === 'payment') {
+      runningBalance -= item.amount || 0;
+    }
+    return { ...item, runningBalance };
+  });
 
-    setCombinedHistory(withRunningBalance);
-  };
+  setCombinedHistory(withRunningBalance);
+};
 
   const filteredTransactions = transactions.filter(transaction => {
     const matchesSearch = transaction.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -171,22 +165,23 @@ const CustomerProfile = () => {
     return matchesSearch && matchesDateRange;
   });
 
-  const filteredCombinedHistory = combinedHistory.filter(item => {
-    const itemDate = new Date(item.date || item.paymentDate);
-    const matchesDateRange = itemDate >= dateRange.from && itemDate <= dateRange.to;
-    
-    let matchesSearch = false;
-    if (item.type === 'transaction') {
-      matchesSearch = item.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                     item.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                     item.carName.toLowerCase().includes(searchTerm.toLowerCase());
-    } else {
-      matchesSearch = item.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                     item.invoiceNo?.toLowerCase().includes(searchTerm.toLowerCase());
-    }
-    
-    return matchesSearch && matchesDateRange;
-  });
+const filteredCombinedHistory = combinedHistory.filter(item => {
+  const itemDate = new Date(item.date || item.paymentDate);
+  const matchesDateRange = itemDate >= dateRange.from && itemDate <= dateRange.to;
+
+  let matchesSearch = false;
+  if (item.type === 'transaction') {
+    matchesSearch = item.invoiceNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                   item.itemName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                   item.carName?.toLowerCase().includes(searchTerm.toLowerCase());
+  } else if (item.type === 'payment') {
+    matchesSearch = true || // payments always match
+                    item.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    item.reference?.toLowerCase().includes(searchTerm.toLowerCase());
+  }
+
+  return matchesSearch && matchesDateRange;
+});
 
   const handlePrint = () => {
     // Create a new window for printing
@@ -222,7 +217,7 @@ const CustomerProfile = () => {
             .report-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
             .report-date { font-size: 12px; color: #666; }
             .profile-section { margin-bottom: 30px; padding: 15px; border: 1px solid #ccc; background-color: #f9f9f9; }
-            .profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 10px; }
+            .profile-grid { display: grid grid-cols-1 md:grid-cols-4  gap: 15px; margin-top: 10px; }
             .profile-item { display: flex; flex-direction: column; }
             .profile-label { font-size: 10px; color: #666; margin-bottom: 2px; }
             .profile-value { font-weight: bold; font-size: 14px; }
@@ -1098,7 +1093,7 @@ const CustomerProfile = () => {
               {/* Balance Summary for Print */}
               <div className="mt-6 bg-gray-100 border border-gray-400 rounded-lg p-6 summary-section page-break-avoid">
                 <h3 className="text-lg font-semibold text-black mb-4">Balance Summary</h3>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div className="bg-white p-4 rounded-lg text-center border border-gray-300">
                     <p className="text-sm text-black">Total Credited</p>
                     <p className="text-xl font-bold text-black">${totalCredited.toLocaleString()}</p>

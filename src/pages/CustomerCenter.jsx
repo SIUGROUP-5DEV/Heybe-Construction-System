@@ -5,7 +5,7 @@ import Button from '../components/Button';
 import Table from '../components/Table';
 import SearchInput from '../components/SearchInput';
 import EditCustomerModal from '../components/EditCustomerModal';
-import { customersAPI } from '../services/api';
+import { customersAPI, invoicesAPI, paymentsAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Footer from '../components/Footer';
@@ -21,37 +21,78 @@ const CustomerCenter = () => {
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
-  const [transactions, setTransactions] = useState([]);
-const [payments, setPayments] = useState([]);
-
-  const totalCredited = transactions.reduce((sum, t) => sum + t.total, 0);
-  const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
-  const finalBalance = Math.max(0, totalCredited - totalPayments);
+  const [customerBalances, setCustomerBalances] = useState({});
 
   // Load customers from database
   useEffect(() => {
     loadCustomers();
+    calculateCustomerBalances();
   }, []);
 
   // Filter customers when search term or payment method changes
   useEffect(() => {
-    const filtered = customers.filter(customer => {
+    const filtered = customers.map(customer => ({
+      ...customer,
+      finalBalance: customerBalances[customer._id] || customer.balance || 0
+    })).filter(customer => {
       const matchesSearch = customer.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            (customer.phoneNumber && customer.phoneNumber.includes(searchTerm));
       
       let matchesType = true;
       if (paymentMethodFilter === 'cash') {
-        matchesType = (customer.balance || 0) === 0;
+        matchesType = (customer.finalBalance || 0) === 0;
       } else if (paymentMethodFilter === 'credit') {
-        matchesType = (customer.balance || 0) > 0;
+        matchesType = (customer.finalBalance || 0) > 0;
       }
       
       return matchesSearch && matchesType;
     });
     setFilteredCustomers(filtered);
-  }
-  )
+  }, [searchTerm, paymentMethodFilter, customers, customerBalances]);
 
+  const calculateCustomerBalances = async () => {
+    try {
+      const [invoicesResponse, paymentsResponse] = await Promise.all([
+        invoicesAPI.getAll(),
+        paymentsAPI.getAll()
+      ]);
+      
+      const allInvoices = invoicesResponse.data;
+      const allPayments = paymentsResponse.data;
+      const balances = {};
+      
+      // Calculate for each customer
+      customers.forEach(customer => {
+        // Get credit transactions for this customer
+        let totalCredited = 0;
+        allInvoices.forEach(invoice => {
+          invoice.items?.forEach(item => {
+            const itemCustomerId = item.customerId?._id || item.customerId;
+            if (itemCustomerId === customer._id && item.paymentMethod === 'credit') {
+              totalCredited += item.total || 0;
+            }
+          });
+        });
+        
+        // Get payments received from this customer
+        const totalPayments = allPayments
+          .filter(payment => 
+            (payment.customerId?._id === customer._id || payment.customerId === customer._id) && 
+            payment.type === 'receive'
+          )
+          .reduce((sum, payment) => sum + payment.amount, 0);
+        
+        // Final balance = Total Credited - Total Payments
+        const finalBalance = Math.max(0, totalCredited - totalPayments);
+        balances[customer._id] = finalBalance;
+      });
+      
+      setCustomerBalances(balances);
+      console.log('✅ Customer balances calculated:', balances);
+    } catch (error) {
+      console.error('❌ Error calculating customer balances:', error);
+    }
+  };
   const loadCustomers = async () => {
     try {
       setLoading(true);
@@ -98,20 +139,10 @@ const [payments, setPayments] = useState([]);
         <span className="font-mono text-gray-700">{value || 'N/A'}</span>
       )
     },
-    {
-      header: 'Balance',
-      accessor: 'balance',
-      render: (value) => (
-        <span className={`font-semibold ${
-          (value || 0) === 0 ? 'text-green-600' : 'text-red-600'
-        }`}>
-          ${(value || 0).toLocaleString()}
-        </span>
-      )
-    },
+    
     {
       header: 'Status',
-      accessor: 'balance',
+      accessor: 'finalBalance',
       render: (value) => (
         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
           (value || 0) === 0 
@@ -232,9 +263,9 @@ const [payments, setPayments] = useState([]);
             sectionName="All Customers"
             profileData={{
               'Total Customers': customers.length,
-              'Cash Customers': customers.filter(customer => (customer.balance || 0) === 0).length,
-              'Credit Customers': customers.filter(customer => (customer.balance || 0) > 0).length,
-                'Current Balance': `$${finalBalance.toLocaleString()}`,
+              'Cash Customers': filteredCustomers.filter(customer => (customer.finalBalance || 0) === 0).length,
+              'Credit Customers': filteredCustomers.filter(customer => (customer.finalBalance || 0) > 0).length,
+              'Total Outstanding': `$${Object.values(customerBalances).reduce((sum, balance) => sum + balance, 0).toLocaleString()}`,
               
               'Report Generated': format(new Date(), 'MMMM dd, yyyy')
             }}
@@ -269,7 +300,7 @@ const [payments, setPayments] = useState([]);
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Cash Customers</p>
               <p className="text-2xl font-bold text-gray-900">
-                {customers.filter(customer => (customer.balance || 0) === 0).length}
+                {Object.values(customerBalances).filter(balance => balance === 0).length}
               </p>
             </div>
           </div>
@@ -283,7 +314,7 @@ const [payments, setPayments] = useState([]);
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Credit Customers</p>
               <p className="text-2xl font-bold text-gray-900">
-                {customers.filter(customer => (customer.balance || 0) > 0).length}
+                {Object.values(customerBalances).filter(balance => balance > 0).length}
               </p>
             </div>
           </div>
@@ -297,7 +328,7 @@ const [payments, setPayments] = useState([]);
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Outstanding</p>
               <p className="text-2xl font-bold text-gray-900">
-                ${customers.reduce((sum, customer) => sum + (customer.balance || 0), 0).toLocaleString()}
+                ${Object.values(customerBalances).reduce((sum, balance) => sum + balance, 0).toLocaleString()}
               </p>
             </div>
           </div>

@@ -16,12 +16,16 @@ import {
   ChevronDown,
   ChevronRight,
   Building2,
-  X
+  X,
+  Database
 } from 'lucide-react';
+import { useState as useLocalState } from 'react';
+import BackupRestoreModal from './BackupRestoreModal';
 
 const Sidebar = () => {
   const { isOpen, closeSidebar } = useSidebar();
   const { logout } = useAuth();
+  const [showBackupModal, setShowBackupModal] = useLocalState(false);
   const location = useLocation();
   
   const [expandedMenus, setExpandedMenus] = useState({
@@ -220,6 +224,14 @@ const Sidebar = () => {
           {/* Logout Button */}
           <div className="p-4 border-t border-gray-200">
             <button
+              onClick={() => setShowBackupModal(true)}
+              className="w-full flex items-center px-4 py-3 text-green-600 hover:bg-green-50 rounded-lg transition-colors mb-3"
+            >
+              <Database className="w-5 h-5 mr-3" />
+              <span className="font-medium">Backup & Restore</span>
+            </button>
+            
+            <button
               onClick={logout}
               className="w-full flex items-center px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             >
@@ -228,6 +240,12 @@ const Sidebar = () => {
             </button>
           </div>
         </div>
+        
+        {/* Backup & Restore Modal */}
+        <BackupRestoreModal
+          isOpen={showBackupModal}
+          onClose={() => setShowBackupModal(false)}
+        />
       </div>
     </>
   );

@@ -16,7 +16,7 @@ const Payments = () => {
   const [loadingData, setLoadingData] = useState(true);
   
   // Payment number state
-  const [nextPaymentNumber, setNextPaymentNumber] = useState('PYN-0001');
+  const [nextPaymentNumber, setNextPaymentNumber] = useState('PYN-001');
   
   const [receiveFormData, setReceiveFormData] = useState({
     customerId: '',
@@ -557,9 +557,9 @@ const Payments = () => {
                 name="paymentNo"
                 value={receiveFormData.paymentNo}
                 onChange={handleReceiveChange}
-                placeholder="e.g., PYN-0001"
+                placeholder="e.g., PYN-001"
                 required
-                disabled
+                enabled
               />
 
               <FormInput
@@ -694,7 +694,7 @@ const Payments = () => {
                 onChange={handlePaymentOutChange}
                 placeholder="e.g., PYN-001"
                 required
-                en
+                enabled
               />
 
               <FormInput

@@ -14,7 +14,7 @@ import SectionPrintOptions from '../components/SectionPrintOptions';
 
 const CarProfile = () => {
   const { id } = useParams();
-  const { showError } = useToast();
+  const { showError, showSuccess } = useToast();
   const [car, setCar] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('transactions');
@@ -148,6 +148,8 @@ const CarProfile = () => {
       'Total Profit': `$${transactions.reduce((sum, t) => sum + t.totalProfit, 0).toLocaleString()}`,
       'Amount Left': `$${transactions.reduce((sum, t) => sum + t.totalLeft, 0).toLocaleString()}`,
       'Total Payments': `$${payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
+      
+      
     };
     
     // Combine all data for printing
@@ -367,7 +369,7 @@ const CarProfile = () => {
           payment._id,
           payment.amount,
           payment.customerId,
-          selectedCar
+          payment.selectedCar
         );
         
         showSuccess(
@@ -788,7 +790,7 @@ const CarProfile = () => {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center">
             <div className="p-3 bg-blue-100 rounded-lg">
@@ -798,6 +800,33 @@ const CarProfile = () => {
               <p className="text-sm font-medium text-gray-600">Total Revenue</p>
               <p className="text-2xl font-bold text-gray-900">
                 ${filteredTransactions.reduce((sum, t) => sum + t.total, 0).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
+  <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <div className="flex items-center">
+            <div className="p-3 bg-red-100 rounded-lg">
+              <DollarSign className="w-6 h-6 text-red-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Total Payment Left</p>
+              <p className="text-2xl font-bold text-gray-900">
+               ${filteredPayments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
+
+         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <div className="flex items-center">
+            <div className="p-3 bg-red-100 rounded-lg">
+              <DollarSign className="w-6 h-6 text-red-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Amount Left</p>
+              <p className="text-2xl font-bold text-gray-900">
+                ${filteredTransactions.reduce((sum, t) => sum + t.totalLeft, 0).toLocaleString()}
               </p>
             </div>
           </div>
@@ -817,19 +846,7 @@ const CarProfile = () => {
           </div>
         </div>
         
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center">
-            <div className="p-3 bg-red-100 rounded-lg">
-              <DollarSign className="w-6 h-6 text-red-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Amount Left</p>
-              <p className="text-2xl font-bold text-gray-900">
-                ${filteredTransactions.reduce((sum, t) => sum + t.totalLeft, 0).toLocaleString()}
-              </p>
-            </div>
-          </div>
-        </div>
+       
       </div>
 
       {/* Invoice Modal */}

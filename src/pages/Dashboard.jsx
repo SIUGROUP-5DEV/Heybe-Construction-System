@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Car, TrendingUp, DollarSign, AlertCircle, Filter, RefreshCw } from 'lucide-react';
+import { Car, TrendingUp, DollarSign, AlertCircle, Filter, RefreshCw, Database } from 'lucide-react';
 import DashboardCard from '../components/DashboardCard';
 import DateFilter from '../components/DateFilter';
 import DashboardCharts from '../components/DashboardCharts';
+import BackupRestoreModal from '../components/BackupRestoreModal';
 import { dashboardAPI, carsAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -11,6 +12,7 @@ import Footer from '../components/Footer';
 
 const Dashboard = () => {
   const { showError, showSuccess } = useToast();
+  const [showBackupModal, setShowBackupModal] = useState(false);
   const [dateRange, setDateRange] = useState({
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date())
@@ -148,6 +150,14 @@ const Dashboard = () => {
           </p>
         </div>
         <div className="flex items-center space-x-4">
+          <button
+            onClick={() => setShowBackupModal(true)}
+            className="flex items-center px-4 py-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors border border-green-200"
+          >
+            <Database className="w-4 h-4 mr-2" />
+            Backup & Restore
+          </button>
+          
           <button
             onClick={handleRefreshData}
             disabled={refreshing}
@@ -448,6 +458,12 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Backup & Restore Modal */}
+      <BackupRestoreModal
+        isOpen={showBackupModal}
+        onClose={() => setShowBackupModal(false)}
+      />
 
 <Footer/>
 
