@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, Plus, ArrowDownLeft, ArrowUpRight, Building2, Calendar, Eye } from 'lucide-react';
+import { CreditCard, Plus, ArrowDownLeft, ArrowUpRight, Building2, Calendar, Eye, Edit2, Edit } from 'lucide-react';
 import Button from '../components/Button';
 import FormInput from '../components/FormInput';
 import FormSelect from '../components/FormSelect';
@@ -14,6 +14,11 @@ const Payments = () => {
   const [showPaymentOutModal, setShowPaymentOutModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+const [showEditPaymentModal, setShowEditPaymentModal] = useState(false);
+const [editPaymentData, setEditPaymentData] = useState(null);
+
+
+
   
   // Payment number state
   const [nextPaymentNumber, setNextPaymentNumber] = useState('PYN-001');
@@ -41,10 +46,10 @@ const Payments = () => {
   const [cars, setCars] = useState([]);
   const [payments, setPayments] = useState([]);
   const [categories, setCategories] = useState([
-    { value: 'fuel', label: 'Fuel' },
-    { value: 'maintenance', label: 'Maintenance' },
-    { value: 'insurance', label: 'Insurance' },
-    { value: 'repairs', label: 'Repairs' },
+    { value: 'farsamo', label: 'farsamo' },
+    { value: 'shidaal', label: 'shidaal' },
+    { value: 'canshuur', label: 'canshuur' },
+    { value: 'mushaar', label: 'mushaar' },
     { value: 'other', label: 'Other' }
   ]);
 
@@ -197,6 +202,55 @@ const Payments = () => {
     setShowViewPaymentModal(true);
     console.log('👁️ Viewing payment:', payment);
   };
+const formatDateForInput = (d) => {
+  if (!d) return '';
+  try {
+    return new Date(d).toISOString().split('T')[0];
+  } catch {
+    return '';
+  }
+};
+
+// change handler for edit form
+const handleEditPaymentChange = (e) => {
+  const { name, value } = e.target;
+  setEditPaymentData(prev => ({
+    ...prev,
+    [name]: value
+  }));
+};
+
+// submit update
+const handleEditPaymentSubmit = async (e) => {
+  e.preventDefault();
+  if (!editPaymentData) return;
+  setLoading(true);
+
+  try {
+    // prepare payload matching your backend
+    const payload = {
+      accountType: editPaymentData.accountType,
+      recipientId: editPaymentData.recipientId,
+      paymentNo: editPaymentData.paymentNo,
+      amount: parseFloat(editPaymentData.amount || 0),
+      description: editPaymentData.description,
+      paymentDate: editPaymentData.paymentDate,
+      accountMonth: editPaymentData.accountMonth
+    };
+
+    await paymentsAPI.update(editPaymentData._id, payload);
+    showSuccess('Payment Updated', `Payment ${editPaymentData.paymentNo} updated`);
+    setShowEditPaymentModal(false);
+    setEditPaymentData(null);
+    loadAllData();
+  } catch (error) {
+    console.error('❌ Error updating payment:', error);
+    showError('Update Failed', error.response?.data?.error || 'Error updating payment');
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const validateReceiveForm = () => {
     if (!receiveFormData.customerId) {
@@ -512,6 +566,17 @@ const Payments = () => {
                     >
                       <Eye className="w-5 h-5" />
                     </button>
+<button
+  onClick={() => {
+    setEditPaymentData(payment); // xogtii payment
+    setShowEditPaymentModal(true);
+  }}
+  className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
+  title="Edit Payment"
+>
+   <Edit className="w-5 text-red-500 h-5" />
+</button>
+
                   </div>
                 </div>
               ))}
@@ -885,6 +950,139 @@ const Payments = () => {
           </div>
         </div>
       )}
+
+{/* Edit Payment Modal */}
+{showEditPaymentModal && editPaymentData && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
+      <div className="p-6 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Edit Payment</h3>
+          <Button variant="outline" size="sm" onClick={() => { setShowEditPaymentModal(false); setEditPaymentData(null); }}>
+            Close
+          </Button>
+        </div>
+      </div>
+
+      <form onSubmit={handleEditPaymentSubmit} className="p-6 space-y-4">
+        <FormInput
+          label="Payment Number"
+          name="paymentNo"
+          value={editPaymentData.paymentNo || ''}
+          onChange={handleEditPaymentChange}
+          required
+        />
+
+        <FormInput
+          label="Payment Date"
+          type="date"
+          name="paymentDate"
+          value={formatDateForInput(editPaymentData.paymentDate)}
+          onChange={handleEditPaymentChange}
+          required
+        />
+
+        <FormSelect
+          label="Account Type"
+          name="accountType"
+          value={editPaymentData.accountType || ''}
+          onChange={handleEditPaymentChange}
+          options={[
+            { value: '', label: 'Choose account type' },
+            { value: 'customer', label: 'Customer' },
+            { value: 'car', label: 'Car' },
+            { value: 'company', label: 'Company' }
+          ]}
+          required
+        />
+
+        {/* Conditional recipient selector: customer or car */}
+        {editPaymentData.accountType === 'customer' && (
+          <FormSelect
+            label="Select Customer"
+            name="recipientId"
+            value={editPaymentData.recipientId || ''}
+            onChange={handleEditPaymentChange}
+            options={[
+              { value: '', label: 'Choose a customer' },
+              ...customers.map(c => ({ value: c._id, label: `${c.customerName} (Balance: $${(c.balance||0).toLocaleString()})` }))
+            ]}
+            required
+          />
+        )}
+
+        {editPaymentData.accountType === 'car' && (
+          <FormSelect
+            label="Select Car"
+            name="recipientId"
+            value={editPaymentData.recipientId || ''}
+            onChange={handleEditPaymentChange}
+            options={[
+              { value: '', label: 'Choose a car' },
+              ...cars.map(car => ({ value: car._id, label: `${car.carName} (Balance: $${(car.balance||0).toLocaleString()})` }))
+            ]}
+            required
+          />
+        )}
+
+        {/* fallback: if company or none selected, allow manual recipient id */}
+        {(!editPaymentData.accountType || editPaymentData.accountType === 'company') && (
+          <FormInput
+            label="Recipient ID (manual)"
+            name="recipientId"
+            value={editPaymentData.recipientId || ''}
+            onChange={handleEditPaymentChange}
+            placeholder="Recipient identifier"
+          />
+        )}
+
+        <FormSelect
+          label="Account Month"
+          name="accountMonth"
+          value={editPaymentData.accountMonth || ''}
+          onChange={handleEditPaymentChange}
+          options={[
+            { value: '', label: 'Choose account month' },
+            ...accountMonths.map(m => ({ value: m.value, label: `${m.label} (${m.status})` }))
+          ]}
+        />
+
+        <FormInput
+          label="Amount"
+          type="number"
+          name="amount"
+          value={editPaymentData.amount || ''}
+          onChange={handleEditPaymentChange}
+          required
+        />
+
+        <FormInput
+          label="Description"
+          name="description"
+          value={editPaymentData.description || ''}
+          onChange={handleEditPaymentChange}
+        />
+
+        <div className="flex space-x-4 pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => { setShowEditPaymentModal(false); setEditPaymentData(null); }}
+            className="flex-1"
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" className="flex-1" disabled={loading}>
+            {loading ? 'Updating...' : 'Save Changes'}
+          </Button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
+
+
 
       <Footer/>
     </div>
