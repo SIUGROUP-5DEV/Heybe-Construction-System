@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, User, Phone, DollarSign, Calendar, Filter, Printer, Edit, Eye, Plus, Minus, CreditCard } from 'lucide-react';
+import { ArrowLeft, User, Phone, DollarSign, Calendar, Filter, Printer, CreditCard as Edit, Eye, Plus, Minus, CreditCard, Edit2, Trash2, EditIcon } from 'lucide-react';
 import Button from '../components/Button';
 import Table from '../components/Table';
 import DateFilter from '../components/DateFilter';
@@ -11,13 +11,36 @@ import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://haype-server.onrender.com/api';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 const EmployeeProfile = () => {
   const { id } = useParams();
   const { showError, showSuccess } = useToast();
   const [employee, setEmployee] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('transactions');
+  const [activeTab, setActiveTab] = useState('payments');
   const [dateRange, setDateRange] = useState({
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date())
@@ -30,6 +53,8 @@ const EmployeeProfile = () => {
   // Balance management modals
   const [showAddBalanceModal, setShowAddBalanceModal] = useState(false);
   const [showDeductBalanceModal, setShowDeductBalanceModal] = useState(false);
+  const [showEditPaymentModal, setShowEditPaymentModal] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState(null);
   const [balanceFormData, setBalanceFormData] = useState({
     amount: '',
     date: new Date().toISOString().split('T')[0],
@@ -106,13 +131,12 @@ const EmployeeProfile = () => {
 
   const loadPaymentHistory = async () => {
     try {
-      // Use the new payment history endpoint
       const response = await employeesAPI.getPaymentHistory(id);
-      setPaymentHistory(response.data);
+      setPaymentHistory(response.data || []);
       console.log('✅ Employee payment history loaded:', response.data);
     } catch (error) {
       console.error('❌ Error loading payment history:', error);
-      showError('Load Failed', 'Failed to load payment history');
+      // Don't show error to user if payment history doesn't exist
       setPaymentHistory([]);
     }
   };
@@ -175,20 +199,24 @@ const EmployeeProfile = () => {
 
   const handleAddBalance = async (e) => {
     e.preventDefault();
-    
+
     if (!balanceFormData.amount || !balanceFormData.date || !balanceFormData.description) {
       showError('Validation Error', 'Please fill in all fields');
       return;
     }
 
     setBalanceLoading(true);
-    
+
     try {
-      // Call API to add balance
-      const response = await employeesAPI.addBalance(id, balanceFormData);
-      
+      // Call backend API to add balance and create payment record
+      const response = await api.post(`/employees/${id}/add-balance`, {
+        amount: balanceFormData.amount,
+        date: balanceFormData.date,
+        description: balanceFormData.description
+      });
+
       showSuccess('Balance Added', `$${balanceFormData.amount} has been added to ${employee.employeeName}'s balance`);
-      
+
       // Reset form and close modal
       setBalanceFormData({
         amount: '',
@@ -196,14 +224,14 @@ const EmployeeProfile = () => {
         description: ''
       });
       setShowAddBalanceModal(false);
-      
+
       // Reload data
       loadEmployeeData();
       loadPaymentHistory();
-      
+
     } catch (error) {
       console.error('❌ Error adding balance:', error);
-      showError('Add Balance Failed', 'Failed to add balance. Please try again.');
+      showError('Add Balance Failed', error.response?.data?.message || 'Failed to add balance. Please try again.');
     } finally {
       setBalanceLoading(false);
     }
@@ -211,20 +239,24 @@ const EmployeeProfile = () => {
 
   const handleDeductBalance = async (e) => {
     e.preventDefault();
-    
+
     if (!balanceFormData.amount || !balanceFormData.date || !balanceFormData.description) {
       showError('Validation Error', 'Please fill in all fields');
       return;
     }
 
     setBalanceLoading(true);
-    
+
     try {
-      // Call API to deduct balance
-      const response = await employeesAPI.deductBalance(id, balanceFormData);
-      
+      // Call backend API to deduct balance and create payment record
+      const response = await api.post(`/employees/${id}/deduct-balance`, {
+        amount: balanceFormData.amount,
+        date: balanceFormData.date,
+        description: balanceFormData.description
+      });
+
       showSuccess('Balance Deducted', `$${balanceFormData.amount} has been deducted from ${employee.employeeName}'s balance`);
-      
+
       // Reset form and close modal
       setBalanceFormData({
         amount: '',
@@ -232,16 +264,85 @@ const EmployeeProfile = () => {
         description: ''
       });
       setShowDeductBalanceModal(false);
-      
+
       // Reload data
       loadEmployeeData();
       loadPaymentHistory();
-      
+
     } catch (error) {
       console.error('❌ Error deducting balance:', error);
-      showError('Deduct Balance Failed', 'Failed to deduct balance. Please try again.');
+      showError('Deduct Balance Failed', error.response?.data?.message || 'Failed to deduct balance. Please try again.');
     } finally {
       setBalanceLoading(false);
+    }
+  };
+
+  const handleEditPayment = (payment) => {
+    setSelectedPayment(payment);
+    setBalanceFormData({
+      amount: payment.amount.toString(),
+      date: format(new Date(payment.paymentDate), 'yyyy-MM-dd'),
+      description: payment.description
+    });
+    setShowEditPaymentModal(true);
+  };
+
+  const handleUpdatePayment = async (e) => {
+    e.preventDefault();
+
+    if (!balanceFormData.amount || !balanceFormData.date || !balanceFormData.description) {
+      showError('Validation Error', 'Please fill in all fields');
+      return;
+    }
+
+    setBalanceLoading(true);
+
+    try {
+      const response = await api.put(`/payments/${selectedPayment._id}`, {
+        amount: balanceFormData.amount,
+        date: balanceFormData.date,
+        description: balanceFormData.description
+      });
+
+      showSuccess('Payment Updated', 'Payment record has been updated successfully');
+
+      // Reset form and close modal
+      setBalanceFormData({
+        amount: '',
+        date: new Date().toISOString().split('T')[0],
+        description: ''
+      });
+      setShowEditPaymentModal(false);
+      setSelectedPayment(null);
+
+      // Reload data
+      loadEmployeeData();
+      loadPaymentHistory();
+
+    } catch (error) {
+      console.error('❌ Error updating payment:', error);
+      showError('Update Failed', error.response?.data?.message || 'Failed to update payment. Please try again.');
+    } finally {
+      setBalanceLoading(false);
+    }
+  };
+
+  const handleDeletePayment = async (payment) => {
+    if (!confirm(`Are you sure you want to delete this payment record? This will reverse the balance change of $${payment.amount}.`)) {
+      return;
+    }
+
+    try {
+      const response = await api.delete(`/payments/${payment._id}`);
+      showSuccess('Payment Deleted', 'Payment record has been deleted and balance has been reversed');
+
+      // Reload data
+      loadEmployeeData();
+      loadPaymentHistory();
+
+    } catch (error) {
+      console.error('❌ Error deleting payment:', error);
+      showError('Delete Failed', error.response?.data?.message || 'Failed to delete payment. Please try again.');
     }
   };
 
@@ -300,7 +401,7 @@ const EmployeeProfile = () => {
             className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
             title="Edit Invoice"
           >
-            <Edit className="w-4 h-4" />
+            <Edit2 className="w-4 h-4" />
           </button>
         </div>
       )
@@ -340,14 +441,36 @@ const EmployeeProfile = () => {
       accessor: 'type',
       render: (value) => (
         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          value === 'balance_add' 
-            ? 'bg-green-100 text-green-800' 
+          value === 'balance_add'
+            ? 'bg-green-100 text-green-800'
             : value === 'balance_deduct'
             ? 'bg-red-100 text-red-800'
             : 'bg-blue-100 text-blue-800'
         }`}>
           {value === 'balance_add' ? 'Added' : value === 'balance_deduct' ? 'Deducted' : 'Payment'}
         </span>
+      )
+    },
+    {
+      header: 'Actions',
+      accessor: '_id',
+      render: (value, row) => (
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => handleEditPayment(row)}
+            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Edit Payment"
+          >
+            <EditIcon className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleDeletePayment(row)}
+            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            title="Delete Payment"
+          >
+            <span className="w-4 h-4 flex items-center justify-center font-bold"><Trash2 className="w-4 h-4" /></span>
+          </button>
+        </div>
       )
     }
   ];
@@ -499,31 +622,17 @@ const EmployeeProfile = () => {
 
         {/* Tab Content */}
         <div className="p-6">
-          {activeTab === 'transactions' ? (
-             <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment History</h2>
-              <p className="text-gray-600 mb-4">
-                Showing {filteredPaymentHistory.length} payment records
-              </p>
-              <Table 
-                data={filteredPaymentHistory} 
-                columns={paymentHistoryColumns}
-                emptyMessage="No payment history found. Use the Add/Deduct Balance buttons to manage employee balance."
-              />
-            </div>
-          ) : (
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment History</h2>
-              <p className="text-gray-600 mb-4">
-                Showing {filteredPaymentHistory.length} payment records
-              </p>
-              <Table 
-                data={filteredPaymentHistory} 
-                columns={paymentHistoryColumns}
-                emptyMessage="No payment history found. Use the Add/Deduct Balance buttons to manage employee balance."
-              />
-            </div>
-          )}
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment History</h2>
+            <p className="text-gray-600 mb-4">
+              Showing {filteredPaymentHistory.length} payment records
+            </p>
+            <Table
+              data={filteredPaymentHistory}
+              columns={paymentHistoryColumns}
+              emptyMessage="No payment history found. Use the Add/Deduct Balance buttons to manage employee balance."
+            />
+          </div>
         </div>
       </div>
 
@@ -644,10 +753,73 @@ const EmployeeProfile = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
 
+      {/* Edit Payment Modal */}
+      {showEditPaymentModal && selectedPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Edit Payment</h3>
+              <p className="text-sm text-gray-600">Update payment record details</p>
+            </div>
 
-<Footer/>
+            <form onSubmit={handleUpdatePayment} className="p-6 space-y-4">
+              <FormInput
+                label="Amount"
+                name="amount"
+                type="number"
+                value={balanceFormData.amount}
+                onChange={handleBalanceFormChange}
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                required
+              />
 
+              <FormInput
+                label="Date"
+                name="date"
+                type="date"
+                value={balanceFormData.date}
+                onChange={handleBalanceFormChange}
+                required
+              />
+
+              <FormInput
+                label="Description"
+                name="description"
+                value={balanceFormData.description}
+                onChange={handleBalanceFormChange}
+                placeholder="Payment description"
+                required
+              />
+
+              <div className="flex space-x-4 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowEditPaymentModal(false);
+                    setSelectedPayment(null);
+                    setBalanceFormData({
+                      amount: '',
+                      date: new Date().toISOString().split('T')[0],
+                      description: ''
+                    });
+                  }}
+                  className="flex-1"
+                  disabled={balanceLoading}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" className="flex-1" disabled={balanceLoading}>
+                  {balanceLoading ? 'Updating...' : 'Update Payment'}
+                </Button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -658,6 +830,8 @@ const EmployeeProfile = () => {
         invoiceNo={selectedInvoice}
         mode={modalMode}
       />
+
+      <Footer />
     </div>
   );
 };

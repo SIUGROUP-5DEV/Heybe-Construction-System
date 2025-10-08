@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Building2, Calendar, Printer, User, ChevronDown, ChevronRight, Eye, Edit, Filter, Trash2 } from 'lucide-react';
+import { Building2, Calendar, Printer, User, ChevronDown, ChevronRight, Eye, CreditCard as Edit, Filter, Trash2, CreditCard } from 'lucide-react';
 import Button from '../components/Button';
 import { customersAPI, invoicesAPI, paymentsAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
@@ -8,6 +8,8 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
 import SectionPrintOptions from '../components/SectionPrintOptions';
+import InvoiceModal from '../components/InvoiceModal';
+import { handlePrintContent, generatePrintStyles } from '../utils/printUtils';
 
 const CustomerReports = () => {
   const { showError, showSuccess } = useToast();
@@ -21,7 +23,12 @@ const CustomerReports = () => {
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState([]);
   const [paymentsData, setPaymentsData] = useState([]);
-  
+
+  // Invoice modal state
+  const [showModal, setShowModal] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [modalMode, setModalMode] = useState('view');
+
   // Data from database
   const [customers, setCustomers] = useState([]);
 
@@ -40,10 +47,12 @@ const CustomerReports = () => {
     
     if (month) {
       // Set date range based on month parameter
-      const [year, monthNum] = month.split('-');
+      const parts = month.split('-');
+      const year = parts[0];
+      const monthNum = parts[1];
       const startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
       const endDate = new Date(parseInt(year), parseInt(monthNum), 0);
-      
+
       setDateRange({
         from: startDate,
         to: endDate
@@ -173,44 +182,8 @@ const CustomerReports = () => {
       showError('Print Error', 'Please select a customer and load data before printing');
       return;
     }
-    
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank');
-    
-    // Prepare customer profile data
-    const profileData = {
-      'Customer Name': selectedCustomerName,
-      'Report Period': `${format(dateRange.from, 'MMM dd')} - ${format(dateRange.to, 'MMM dd, yyyy')}`,
-      'Total Items': `${reportData.length} different items`,
-      'Total Transactions': `${reportData.reduce((sum, item) => sum + item.transactions.length, 0)} transactions`
-    };
-    
-    // Prepare summary data
-    const summaryData = {
-      'Total Value': `$${reportData.reduce((sum, item) => sum + item.totalValue, 0).toLocaleString()}`,
-      'Total Quantity': `${reportData.reduce((sum, item) => sum + item.totalQuantity, 0)} units`,
-      'Total Payments': `$${paymentsData.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`,
-      'Outstanding Balance': `$${(reportData.reduce((sum, item) => sum + item.totalValue, 0) - paymentsData.reduce((sum, p) => sum + p.amount, 0)).toLocaleString()}`
-    };
-    
-    // Flatten all transactions for printing
-    const allTransactions = [];
-    reportData.forEach(item => {
-      item.transactions.forEach(transaction => {
-        allTransactions.push({
-          date: format(new Date(transaction.date), 'MMM dd, yyyy'),
-          invoiceNo: transaction.invoiceNo,
-          itemName: item.itemName,
-          carName: transaction.carName,
-          quantity: `${transaction.quantity} units`,
-          price: `$${transaction.price}`,
-          total: `$${transaction.total.toLocaleString()}`,
-          paymentMethod: transaction.paymentMethod.toUpperCase()
-        });
-      });
-    });
-    
-    // Generate the HTML content
+
+    // Generate the HTML content matching the screenshot format
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -218,133 +191,207 @@ const CustomerReports = () => {
           <title>Customer Report - ${selectedCustomerName}</title>
           <style>
             @page { margin: 0.5in; size: A4; }
-            body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.4; color: black; margin: 0; padding: 20px; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid black; padding-bottom: 20px; }
-            .company-name { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
-            .report-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
-            .report-date { font-size: 12px; color: #666; }
-            .profile-section { margin-bottom: 30px; padding: 15px; border: 1px solid #ccc; background-color: #f9f9f9; }
-            .profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 10px; }
-            .profile-item { display: flex; flex-direction: column; }
-            .profile-label { font-size: 10px; color: #666; margin-bottom: 2px; }
-            .profile-value { font-weight: bold; font-size: 14px; }
-            .data-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            .data-table th, .data-table td { border: 1px solid black; padding: 8px; text-align: left; font-size: 11px; }
-            .data-table th { background-color: #f0f0f0; font-weight: bold; }
-            .data-table tr:nth-child(even) { background-color: #f9f9f9; }
-            .summary-section { margin-top: 30px; padding: 15px; border: 2px solid black; background-color: #f0f0f0; }
-            .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 10px; }
-            .summary-item { text-align: center; padding: 10px; border: 1px solid #ccc; background-color: white; }
-            .summary-label { font-size: 10px; color: #666; margin-bottom: 5px; }
-            .summary-value { font-weight: bold; font-size: 16px; }
-            .no-break { page-break-inside: avoid; }
+            * { box-sizing: border-box; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+              font-size: 14px;
+              line-height: 1.5;
+              color: #000;
+              margin: 0;
+              padding: 20px;
+              background: white;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              margin-bottom: 30px;
+              padding-bottom: 15px;
+              border-bottom: 2px solid #e5e7eb;
+            }
+            .company-info {
+              display: flex;
+              align-items: center;
+              gap: 15px;
+            }
+            .logo {
+              width: 50px;
+              height: 50px;
+              background: #2563eb;
+              border-radius: 8px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 24px;
+              font-weight: bold;
+              color: white;
+            }
+            .company-text h1 {
+              font-size: 20px;
+              font-weight: bold;
+              margin: 0 0 2px 0;
+              color: #111827;
+            }
+            .company-text p {
+              font-size: 13px;
+              color: #6b7280;
+              margin: 0;
+            }
+            .date-info {
+              text-align: right;
+              font-size: 14px;
+              font-weight: 600;
+              color: #111827;
+            }
+            .customer-section {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 25px;
+              padding: 15px 0;
+            }
+            .customer-name {
+              flex: 1;
+            }
+            .customer-name label {
+              font-size: 12px;
+              color: #6b7280;
+              display: block;
+              margin-bottom: 4px;
+            }
+            .customer-name h2 {
+              font-size: 18px;
+              font-weight: 700;
+              margin: 0;
+              color: #111827;
+            }
+            .report-period {
+              text-align: right;
+            }
+            .report-period label {
+              font-size: 12px;
+              color: #6b7280;
+              display: block;
+              margin-bottom: 4px;
+            }
+            .report-period h3 {
+              font-size: 16px;
+              font-weight: 600;
+              margin: 0;
+              color: #111827;
+            }
+            .section-title {
+              font-size: 16px;
+              font-weight: 700;
+              margin: 30px 0 15px 0;
+              color: #111827;
+            }
+            .item-card {
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+              padding: 16px 20px;
+              margin-bottom: 12px;
+              background: #f9fafb;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            }
+            .item-name {
+              font-size: 15px;
+              font-weight: 600;
+              color: #111827;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            }
+            .chevron {
+              color: #9ca3af;
+            }
+            .item-stats {
+              display: flex;
+              gap: 40px;
+              align-items: center;
+            }
+            .stat {
+              text-align: right;
+            }
+            .stat-label {
+              font-size: 11px;
+              color: #6b7280;
+              display: block;
+              margin-bottom: 2px;
+            }
+            .stat-value {
+              font-size: 14px;
+              font-weight: 600;
+              color: #111827;
+            }
+            .stat-value.blue {
+              color: #2563eb;
+            }
+            .stat-value.green {
+              color: #059669;
+            }
+            .no-break {
+              page-break-inside: avoid;
+            }
           </style>
         </head>
         <body>
           <div class="header">
-            <div class="company-name">Haype Construction</div>
-            <div class="report-title">Customer Report - ${selectedCustomerName}</div>
-            <div class="report-date">Generated on ${new Date().toLocaleDateString()}</div>
+            <div class="company-info">
+              <div class="logo">📋</div>
+              <div class="company-text">
+                <h1>Haype Construction</h1>
+                <p>Business Management System</p>
+              </div>
+            </div>
+            <div class="date-info">
+              ${format(new Date(), 'MMM dd, yyyy')}
+            </div>
           </div>
-          
-          <div class="profile-section no-break">
-            <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: bold;">Customer Information</h3>
-            <div class="profile-grid">
-              ${Object.entries(profileData).map(([key, value]) => `
-                <div class="profile-item">
-                  <div class="profile-label">${key}</div>
-                  <div class="profile-value">${value}</div>
+
+          <div class="customer-section">
+            <div class="customer-name">
+              <label>Customer</label>
+              <h2>${selectedCustomerName}</h2>
+            </div>
+            <div class="report-period">
+              <label>Report Period</label>
+              <h3>${format(dateRange.from, 'MMM dd')} - ${format(dateRange.to, 'MMM dd, yyyy')}</h3>
+            </div>
+          </div>
+
+          <h2 class="section-title">Transaction Summary by Item</h2>
+
+          ${reportData.map(item => `
+            <div class="item-card no-break">
+              <div class="item-name">
+                <span class="chevron">›</span>
+                <span>${item.itemName}</span>
+              </div>
+              <div class="item-stats">
+                <div class="stat">
+                  <span class="stat-label">Total Quantity</span>
+                  <div class="stat-value blue">${item.totalQuantity} units</div>
                 </div>
-              `).join('')}
-            </div>
-          </div>
-          
-          <div class="no-break">
-            <h3 style="margin: 20px 0 10px 0; font-size: 16px; font-weight: bold;">Credit Transactions (${allTransactions.length} records)</h3>
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Invoice No</th>
-                  <th>Item Name</th>
-                  <th>Car Name</th>
-                  <th>Quantity</th>
-                  <th>Price</th>
-                  <th>Total</th>
-                  <th>Payment Method</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${allTransactions.map(transaction => `
-                  <tr>
-                    <td>${transaction.date}</td>
-                    <td>${transaction.invoiceNo}</td>
-                    <td>${transaction.itemName}</td>
-                    <td>${transaction.carName}</td>
-                    <td>${transaction.quantity}</td>
-                    <td>${transaction.price}</td>
-                    <td>${transaction.total}</td>
-                    <td>${transaction.paymentMethod}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-          
-          ${paymentsData.length > 0 ? `
-            <div class="no-break">
-              <h3 style="margin: 20px 0 10px 0; font-size: 16px; font-weight: bold;">Payment History (${paymentsData.length} records)</h3>
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Payment No</th>
-                    <th>Description</th>
-                    <th>Amount</th>
-                    <th>Balance Impact</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${paymentsData.map(payment => `
-                    <tr>
-                      <td>${format(new Date(payment.paymentDate), 'MMM dd, yyyy')}</td>
-                      <td>${payment.type === 'receive' ? 'Payment Received' : 'Credit Purchase'}</td>
-                      <td>${payment.paymentNo || 'N/A'}</td>
-                      <td>${payment.description || 'No description'}</td>
-                      <td>${payment.type === 'receive' ? '-' : '+'}$${payment.amount.toLocaleString()}</td>
-                      <td>${payment.type === 'receive' ? 'Reduced balance' : 'Added to balance'}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          ` : ''}
-          
-          <div class="summary-section no-break">
-            <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: bold;">Financial Summary</h3>
-            <div class="summary-grid">
-              ${Object.entries(summaryData).map(([key, value]) => `
-                <div class="summary-item">
-                  <div class="summary-label">${key}</div>
-                  <div class="summary-value">${value}</div>
+                <div class="stat">
+                  <span class="stat-label">Unit Price</span>
+                  <div class="stat-value">$${item.unitPrice}</div>
                 </div>
-              `).join('')}
+                <div class="stat">
+                  <span class="stat-label">Total Value</span>
+                  <div class="stat-value green">$${item.totalValue.toLocaleString()}</div>
+                </div>
+              </div>
             </div>
-          </div>
+          `).join('')}
+
         </body>
       </html>
     `;
-    
-    // Write content to new window and print
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    
-    // Wait for content to load then print
-    printWindow.onload = () => {
-      printWindow.print();
-      printWindow.close();
-    };
+
+    // Use universal print function that works on both mobile and desktop
+    handlePrintContent(htmlContent, `Customer Report - ${selectedCustomerName}`);
   };
 
   const handleApplyFilter = () => {
@@ -352,10 +399,66 @@ const CustomerReports = () => {
       alert('Please select a customer first');
       return;
     }
-    
+
     loadReportData();
     const customerName = customers.find(c => c._id === selectedCustomer)?.customerName || '';
     alert(`Filter applied for ${customerName} from ${format(dateRange.from, 'MMM dd')} to ${format(dateRange.to, 'MMM dd, yyyy')}`);
+  };
+
+  const handleAllData = async () => {
+    if (!selectedCustomer) {
+      alert('Please select a customer first');
+      return;
+    }
+
+    try {
+      // Load all invoices and payments to find earliest date
+      const invoicesResponse = await invoicesAPI.getAll();
+      const paymentsResponse = await paymentsAPI.getAll();
+
+      const allInvoices = invoicesResponse.data;
+      const allPayments = paymentsResponse.data;
+
+      // Filter transactions for selected customer
+      const customerTransactions = [];
+      allInvoices.forEach(invoice => {
+        invoice.items?.forEach(item => {
+          const itemCustomerId = item.customerId?._id || item.customerId;
+          if (itemCustomerId === selectedCustomer && item.paymentMethod === 'credit') {
+            customerTransactions.push(new Date(invoice.invoiceDate));
+          }
+        });
+      });
+
+      // Filter payments for selected customer
+      const customerPayments = allPayments
+        .filter(p => (p.customerId?._id === selectedCustomer || p.customerId === selectedCustomer))
+        .map(p => new Date(p.paymentDate));
+
+      // Combine all dates
+      const allDates = [...customerTransactions, ...customerPayments].filter(d => !isNaN(d.getTime()));
+
+      if (allDates.length > 0) {
+        const earliestDate = new Date(Math.min(...allDates));
+        setDateRange({
+          from: earliestDate,
+          to: new Date()
+        });
+
+        // Reload data with new date range
+        setTimeout(() => {
+          loadReportData();
+          loadPaymentsData();
+        }, 100);
+
+        showSuccess('All Data Loaded', `Showing all data from ${format(earliestDate, 'MMM dd, yyyy')} to today`);
+      } else {
+        showError('No Data', 'No transactions found for this customer');
+      }
+    } catch (error) {
+      console.error('Error loading all data:', error);
+      showError('Error', 'Failed to load all data');
+    }
   };
 
   const toggleItemExpansion = (itemName) => {
@@ -365,14 +468,58 @@ const CustomerReports = () => {
     }));
   };
 
-  const handleViewInvoice = (invoiceNo) => {
-    console.log('View invoice:', invoiceNo);
-    alert(`Opening invoice ${invoiceNo} for viewing`);
+  const handleViewInvoice = async (invoiceNo) => {
+    try {
+      const response = await invoicesAPI.getAll();
+      const invoice = response.data.find(inv => inv.invoiceNo === invoiceNo);
+
+      if (invoice) {
+        setSelectedInvoice(invoice);
+        setModalMode('view');
+        setShowModal(true);
+      } else {
+        showError('Not Found', `Invoice ${invoiceNo} not found`);
+      }
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      showError('Error', 'Failed to load invoice');
+    }
   };
 
-  const handleEditInvoice = (invoiceNo) => {
-    console.log('Edit invoice:', invoiceNo);
-    alert(`Opening invoice ${invoiceNo} for editing`);
+  const handleEditInvoice = async (invoiceNo) => {
+    try {
+      const response = await invoicesAPI.getAll();
+      const invoice = response.data.find(inv => inv.invoiceNo === invoiceNo);
+
+      if (invoice) {
+        setSelectedInvoice(invoice);
+        setModalMode('edit');
+        setShowModal(true);
+      } else {
+        showError('Not Found', `Invoice ${invoiceNo} not found`);
+      }
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      showError('Error', 'Failed to load invoice');
+    }
+  };
+
+  const handleMakePayment = async (invoiceNo) => {
+    try {
+      const response = await invoicesAPI.getAll();
+      const invoice = response.data.find(inv => inv.invoiceNo === invoiceNo);
+
+      if (invoice) {
+        setSelectedInvoice(invoice);
+        setModalMode('payment');
+        setShowModal(true);
+      } else {
+        showError('Not Found', `Invoice ${invoiceNo} not found`);
+      }
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      showError('Error', 'Failed to load invoice');
+    }
   };
 
   const handleDeletePayment = async (payment) => {
@@ -483,22 +630,18 @@ const CustomerReports = () => {
                   </option>
                 ))}
               </select>
+
+                          
             </div>
             
             <div className="flex items-center space-x-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Quick Filter</label>
                 <button
-                  onClick={() => {
-                    setDateRange({
-                      from: new Date('2020-01-01'),
-                      to: new Date('2030-12-31')
-                    });
-                    if (selectedCustomer) loadReportData();
-                  }}
+                  onClick={handleAllData}
                   className="border border-gray-300 rounded-lg px-3 py-2 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
                 >
-                  All Dates
+                  All Data
                 </button>
               </div>
               
@@ -720,6 +863,13 @@ const CustomerReports = () => {
                                     >
                                       <Edit className="w-4 h-4" />
                                     </button>
+                                    <button
+                                      onClick={() => handleMakePayment(transaction.invoiceNo)}
+                                      className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                                      title="Make Payment"
+                                    >
+                                      <CreditCard className="w-4 h-4" />
+                                    </button>
                                   </div>
                                 </td>
                               </tr>
@@ -902,6 +1052,19 @@ const CustomerReports = () => {
           <p className="text-gray-600 mt-4">Loading report data...</p>
         </div>
       )}
+
+      {/* Invoice Modal */}
+      <InvoiceModal
+        isOpen={showModal}
+        onClose={() => {
+          setShowModal(false);
+          setSelectedInvoice(null);
+          loadReportData();
+          loadPaymentsData();
+        }}
+        mode={modalMode}
+        invoice={selectedInvoice}
+      />
 
 <Footer/>
 

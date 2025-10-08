@@ -4,33 +4,61 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { format } from 'date-fns';
-import logo from '../assets/sitelogo.png'
+import logo from '../assets/sitelogo.png';
+import { handlePrintContent, generatePrintStyles } from '../utils/printUtils';
 
 
 
-const SectionPrintOptions = ({ 
-  data, 
-  columns, 
-  title, 
+const SectionPrintOptions = ({
+  data,
+  columns,
+  title,
   sectionName,
   profileData = null,
   dateRange = null,
+  balanceSummary = null,
   className = ""
 }) => {
   // Calculate balance summary for the current data
   const calculateBalanceSummary = () => {
-    const totalAmount = data.reduce((sum, row) => {
-      const amount = row.total || row.amount || 0;
-      return sum + amount;
-    }, 0);
-    
-    const totalPayments = data.reduce((sum, row) => {
-      const left = row.totalPayments || row.leftAmount || 0;
-      return sum + left;
-    }, 0);
-    
+    // If balanceSummary is passed as prop, use it (for accurate totals from parent)
+    if (balanceSummary) {
+      return balanceSummary;
+    }
+
+    // Otherwise calculate from current data
+    // Check if data contains transactions or payments
+    const hasTransactions = data.some(row => row.total !== undefined || row.invoiceNo !== undefined);
+    const hasPayments = data.some(row => row.amount !== undefined && row.paymentDate !== undefined);
+
+    let totalAmount = 0;
+    let totalPayments = 0;
+
+    if (sectionName.includes('Payment')) {
+      // For payment sections, totalPayments is sum of payment amounts
+      totalPayments = data.reduce((sum, row) => sum + (row.amount || 0), 0);
+      totalAmount = 0; // No transaction amount in payment-only view
+    } else if (sectionName.includes('Transaction') || sectionName.includes('Cash')) {
+      // For transaction sections, totalAmount is sum of transaction totals
+      totalAmount = data.reduce((sum, row) => sum + (row.total || 0), 0);
+      totalPayments = 0; // No payments in transaction-only view
+    } else if (sectionName.includes('Combined')) {
+      // For combined view, separate transactions and payments
+      totalAmount = data
+        .filter(row => row.type === 'transaction')
+        .reduce((sum, row) => sum + (row.total || 0), 0);
+
+      totalPayments = data
+        .filter(row => row.type === 'payment')
+        .reduce((sum, row) => sum + (row.amount || 0), 0);
+    } else {
+      // Fallback: try to determine from data structure
+      totalAmount = data.reduce((sum, row) => sum + (row.total || 0), 0);
+      totalPayments = data.reduce((sum, row) => sum + (row.amount || 0), 0);
+    }
+
     const finalBalance = totalAmount - totalPayments;
-    
+
     return { totalAmount, totalPayments, finalBalance };
   };
 
@@ -70,14 +98,12 @@ const SectionPrintOptions = ({
 
   const handleSectionPrint = () => {
     const balanceSummary = calculateBalanceSummary();
-    
+
     // Filter out Actions and Profit columns for printing
-    const printColumns = columns.filter(col => 
-      !col.header.toLowerCase().includes('action') && 
+    const printColumns = columns.filter(col =>
+      !col.header.toLowerCase().includes('action') &&
       !col.header.toLowerCase().includes('profit')
     );
-    
-    const printWindow = window.open('', '_blank');
     
     // Generate HTML for printing with company branding
     const htmlContent = `
@@ -308,13 +334,38 @@ const SectionPrintOptions = ({
                   <tr>
                     ${printColumns.map(col => {
                       let value = row[col.accessor];
-                      
+
+                      // Special handling for combined history
+                      if (col.header === 'Date' && !value) {
+                        value = row.paymentDate || row.date;
+                      }
+                      if (col.header === 'Reference' && !value) {
+                        value = row.paymentNo || row.invoiceNo;
+                      }
+                      if (col.header === 'Type') {
+                        value = row.type === 'transaction' ? 'Credit Purchase' : 'MKPYN Payment';
+                      }
+                      if (col.header === 'Description') {
+                        if (row.type === 'transaction') {
+                          value = row.itemName && row.quantity && row.price
+                            ? row.itemName + ' (' + row.quantity + ' units @ $' + row.price + ')'
+                            : row.description || value || '';
+                        } else {
+                          value = row.description || 'Payment received';
+                        }
+                      }
+                      if (col.header === 'Amount') {
+                        const amount = row.type === 'transaction' ? row.total : row.amount;
+                        const sign = row.type === 'transaction' ? '+' : '-';
+                        value = sign + '$' + (amount || 0).toLocaleString();
+                      }
+
                       // Handle nested objects
                       if (col.accessor && col.accessor.includes('.')) {
                         const keys = col.accessor.split('.');
                         value = keys.reduce((obj, key) => obj?.[key], row);
                       }
-                      
+
                       // Format special values
                       if (typeof value === 'object' && value !== null) {
                         if (value.customerName) value = value.customerName;
@@ -323,30 +374,19 @@ const SectionPrintOptions = ({
                         else if (value.employeeName) value = value.employeeName;
                         else value = JSON.stringify(value);
                       }
-                      
+
                       // Format dates
-                   
+                      if (value && !isNaN(Date.parse(value)) && (col.accessor.toLowerCase().includes('date') || col.header.toLowerCase().includes('date'))) {
+                        value = format(new Date(value), 'MMM dd, yyyy');
+                      }
 
-// Handle nested objects
-if (col.accessor && col.accessor.includes('.')) {
-  const keys = col.accessor.split('.');
-  value = keys.reduce((obj, key) => obj?.[key], row);
-}
-
-// Format dates (waxaad ka dhigtaa mid guud)
-if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('date')) {
-  value = format(new Date(value), 'dd-MM-yyyy');
-}
-
-
-                      
-                      // Format currency
-                      if (col.accessor.includes('balance') || col.accessor.includes('amount') || col.accessor.includes('total') || col.accessor.includes('price')) {
+                      // Format currency (if not already formatted)
+                      if (!value?.toString().includes('$') && (col.accessor.includes('balance') || col.accessor.includes('amount') || col.accessor.includes('total') || col.accessor.includes('price'))) {
                         if (typeof value === 'number') {
                           value = `$${value.toLocaleString()}`;
                         }
                       }
-                      
+
                       return `<td>${value || ''}</td>`;
                     }).join('')}
                   </tr>
@@ -364,7 +404,7 @@ if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('d
                   <span style="font-size: 16px; font-weight: bold; color: #059669;">$${balanceSummary.totalAmount.toLocaleString()}</span>
                 </div>
                 <div style="margin-bottom: 8px;">
-                  <span style="font-size: 12px; color: #6b7280;">Total Amount Left:</span><br>
+                  <span style="font-size: 12px; color: #6b7280;">Total MKPYN Payments:</span><br>
                   <span style="font-size: 16px; font-weight: bold; color: #dc2626;">$${balanceSummary.totalPayments.toLocaleString()}</span>
                 </div>
                 <div style="border-top: 1px solid #bfdbfe; padding-top: 8px;">
@@ -381,13 +421,8 @@ if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('d
       </html>
     `;
     
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    
-    printWindow.onload = () => {
-      printWindow.print();
-      printWindow.close();
-    };
+    // Use universal print function that works on both mobile and desktop
+    handlePrintContent(htmlContent, `${title} - ${sectionName}`);
   };
 
   const handleSectionExcel = () => {
@@ -664,7 +699,16 @@ if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('d
         </div>
       )}
     </div>
+
+
+
+
   );
 };
 
+
+
+
 export default SectionPrintOptions;
+
+

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, Plus, ArrowDownLeft, ArrowUpRight, Building2, Calendar, Eye, Edit2, Edit } from 'lucide-react';
+import { CreditCard, Plus, ArrowDownLeft, ArrowUpRight, Building2, Calendar, Eye, CreditCard as Edit2, CreditCard as Edit, Trash2 } from 'lucide-react';
 import Button from '../components/Button';
 import FormInput from '../components/FormInput';
 import FormSelect from '../components/FormSelect';
@@ -33,8 +33,6 @@ const [editPaymentData, setEditPaymentData] = useState(null);
   
   const [paymentOutFormData, setPaymentOutFormData] = useState({
     carId: '',
-    category: '',
-    accountMonth: '',
     paymentNo: '',
     date: new Date().toISOString().split('T')[0],
     amount: '',
@@ -74,32 +72,24 @@ const [editPaymentData, setEditPaymentData] = useState(null);
   const generateAccountMonths = () => {
     const months = [];
     const currentDate = new Date();
-    
+
     // Generate 12 months (current + 11 previous)
     for (let i = 0; i < 12; i++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
       const monthKey = date.toISOString().slice(0, 7); // YYYY-MM format
-      const monthLabel = date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long' 
+      const monthLabel = date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long'
       });
-      
+
       months.push({
         value: monthKey,
         label: monthLabel,
         status: i === 0 ? 'Active' : 'Closed' // Current month is active, others are closed
       });
     }
-    
+
     setAccountMonths(months);
-    
-    // Auto-select current month
-    if (months.length > 0) {
-      setPaymentOutFormData(prev => ({
-        ...prev,
-        accountMonth: months[0].value
-      }));
-    }
   };
 
   const generateNextPaymentNumber = () => {
@@ -234,9 +224,13 @@ const handleEditPaymentSubmit = async (e) => {
       paymentNo: editPaymentData.paymentNo,
       amount: parseFloat(editPaymentData.amount || 0),
       description: editPaymentData.description,
-      paymentDate: editPaymentData.paymentDate,
-      accountMonth: editPaymentData.accountMonth
+      paymentDate: editPaymentData.paymentDate
     };
+
+    // Only include accountMonth if it exists (for backwards compatibility)
+    if (editPaymentData.accountMonth) {
+      payload.accountMonth = editPaymentData.accountMonth;
+    }
 
     await paymentsAPI.update(editPaymentData._id, payload);
     showSuccess('Payment Updated', `Payment ${editPaymentData.paymentNo} updated`);
@@ -251,6 +245,45 @@ const handleEditPaymentSubmit = async (e) => {
   }
 };
 
+// delete payment handler
+const handleDeletePayment = async (payment) => {
+  const confirmMessage = `Delete Payment?\n\n` +
+    `Payment: ${payment.paymentNo || 'N/A'}\n` +
+    `Amount: $${payment.amount.toLocaleString()}\n` +
+    `Type: ${payment.type === 'receive' ? 'Payment Received' : 'Payment Out'}\n\n` +
+    `This action cannot be undone.\n\n` +
+    `Continue?`;
+
+  if (window.confirm(confirmMessage)) {
+    try {
+      setLoading(true);
+
+      const customerId = payment.customerId?._id || payment.customerId;
+      const carId = payment.carId?._id || payment.carId;
+
+      await paymentsAPI.deleteWithBalanceAdjustment(
+        payment._id,
+        payment.amount,
+        customerId,
+        carId
+      );
+
+      showSuccess(
+        'Payment Deleted',
+        `Payment deleted successfully`
+      );
+
+      loadAllData();
+
+    } catch (error) {
+      console.error('❌ Error deleting payment:', error);
+      showError('Delete Failed', 'Failed to delete payment. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+};
+
 
   const validateReceiveForm = () => {
     if (!receiveFormData.customerId) {
@@ -261,10 +294,6 @@ const handleEditPaymentSubmit = async (e) => {
       showError('Validation Error', 'Please enter a valid amount');
       return false;
     }
-    if (!receiveFormData.paymentNo) {
-      showError('Validation Error', 'Please enter payment number');
-      return false;
-    }
     return true;
   };
 
@@ -273,20 +302,8 @@ const handleEditPaymentSubmit = async (e) => {
       showError('Validation Error', 'Please select a car');
       return false;
     }
-    if (!paymentOutFormData.category) {
-      showError('Validation Error', 'Please select a category');
-      return false;
-    }
-    if (!paymentOutFormData.accountMonth) {
-      showError('Validation Error', 'Please select account month');
-      return false;
-    }
     if (!paymentOutFormData.amount || parseFloat(paymentOutFormData.amount) <= 0) {
       showError('Validation Error', 'Please enter a valid amount');
-      return false;
-    }
-    if (!paymentOutFormData.paymentNo) {
-      showError('Validation Error', 'Please enter payment number');
       return false;
     }
     return true;
@@ -347,70 +364,55 @@ const handleEditPaymentSubmit = async (e) => {
 
   const handlePaymentOutSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validatePaymentOutForm()) return;
-    
-    // Check if trying to pay from closed account
-    const selectedAccountMonth = accountMonths.find(month => month.value === paymentOutFormData.accountMonth);
-    if (selectedAccountMonth?.status === 'Closed') {
-      showWarning(
-        'Closed Account Warning', 
-        `You are making a payment from ${selectedAccountMonth.label} which is a closed account. The payment will still be processed.`
-      );
-    }
-    
+
     setLoading(true);
-    
+
     try {
       const paymentData = {
         accountType: 'car',
         recipientId: paymentOutFormData.carId,
         paymentNo: paymentOutFormData.paymentNo,
         amount: parseFloat(paymentOutFormData.amount),
-        description: `${paymentOutFormData.category}: ${paymentOutFormData.description}`,
-        paymentDate: paymentOutFormData.date,
-        accountMonth: paymentOutFormData.accountMonth
+        description: paymentOutFormData.description || 'Payment Out',
+        paymentDate: paymentOutFormData.date
       };
-      
+
       const response = await paymentsAPI.paymentOut(paymentData);
       console.log('✅ Payment processed:', response.data);
-      
+
       // Add payment amount to car left amount
       const selectedCar = cars.find(car => car._id === paymentOutFormData.carId);
       if (selectedCar) {
         const newCarLeft = (selectedCar.left || 0) + parseFloat(paymentOutFormData.amount);
-        await carsAPI.update(paymentOutFormData.carId, { 
-          left: newCarLeft 
+        await carsAPI.update(paymentOutFormData.carId, {
+          left: newCarLeft
         });
         console.log(`✅ Car ${selectedCar.carName} left amount updated: +$${paymentOutFormData.amount} = $${newCarLeft}`);
       }
-      
-      const selectedCategory = categories.find(cat => cat.value === paymentOutFormData.category);
-      const selectedMonth = accountMonths.find(month => month.value === paymentOutFormData.accountMonth);
-      
+
       showSuccess(
         'Payment Processed',
-        `Payment of $${paymentOutFormData.amount} processed for ${selectedCar.carName} - ${selectedCategory?.label} from ${selectedMonth?.label} account with payment number ${paymentOutFormData.paymentNo}`
+        `Payment of $${paymentOutFormData.amount} processed for ${selectedCar?.carName} with payment number ${paymentOutFormData.paymentNo}`
       );
-      
+
       setShowPaymentOutModal(false);
-      
+
       // Generate next payment number
       const nextNum = parseInt(nextPaymentNumber.replace('PYN-', '')) + 1;
       const newPaymentNo = `PYN-${String(nextNum).padStart(4, '0')}`;
       setNextPaymentNumber(newPaymentNo);
-      
+
       // Reset form with new payment number
       setPaymentOutFormData({
         carId: '',
-        category: '',
-        accountMonth: accountMonths[0]?.value || '',
         paymentNo: newPaymentNo,
         date: new Date().toISOString().split('T')[0],
         amount: '',
         description: ''
       });
-      
+
       // Reload payments
       loadAllData();
       
@@ -566,17 +568,23 @@ const handleEditPaymentSubmit = async (e) => {
                     >
                       <Eye className="w-5 h-5" />
                     </button>
-<button
-  onClick={() => {
-    setEditPaymentData(payment); // xogtii payment
-    setShowEditPaymentModal(true);
-  }}
-  className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
-  title="Edit Payment"
->
-   <Edit className="w-5 text-red-500 h-5" />
-</button>
-
+                    <button
+                      onClick={() => {
+                        setEditPaymentData(payment);
+                        setShowEditPaymentModal(true);
+                      }}
+                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      title="Edit Payment"
+                    >
+                      <Edit className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeletePayment(payment)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete Payment"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -623,7 +631,6 @@ const handleEditPaymentSubmit = async (e) => {
                 value={receiveFormData.paymentNo}
                 onChange={handleReceiveChange}
                 placeholder="e.g., PYN-001"
-                required
                 enabled
               />
 
@@ -707,58 +714,12 @@ const handleEditPaymentSubmit = async (e) => {
                 required
               />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Category <span className="text-red-500">*</span>
-                </label>
-                <div className="flex space-x-2">
-                  <select
-                    name="category"
-                    value={paymentOutFormData.category}
-                    onChange={handlePaymentOutChange}
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    <option value="">Choose a category</option>
-                    {categories.map(category => (
-                      <option key={category.value} value={category.value}>
-                        {category.label}
-                      </option>
-                    ))}
-                  </select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowAddCategoryModal(true)}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <FormSelect
-                label="Account Monthly"
-                name="accountMonth"
-                value={paymentOutFormData.accountMonth}
-                onChange={handlePaymentOutChange}
-                options={[
-                  { value: '', label: 'Choose account month' },
-                  ...accountMonths.map(month => ({
-                    value: month.value,
-                    label: `${month.label} (${month.status})`
-                  }))
-                ]}
-                required
-              />
-
               <FormInput
                 label="Payment Number"
                 name="paymentNo"
                 value={paymentOutFormData.paymentNo}
                 onChange={handlePaymentOutChange}
                 placeholder="e.g., PYN-001"
-                required
                 enabled
               />
 
@@ -906,20 +867,28 @@ const handleEditPaymentSubmit = async (e) => {
                     </span>
                   </div>
                   
-                  {selectedPayment.customerId && (
+                  {(selectedPayment.customerId || (selectedPayment.accountType === 'customer' && selectedPayment.recipientId)) && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Customer:</span>
                       <span className="font-medium">
-                        {customers.find(c => c._id === selectedPayment.customerId)?.customerName || 'Unknown Customer'}
+                        {(() => {
+                          const customerId = selectedPayment.customerId?._id || selectedPayment.customerId || selectedPayment.recipientId?._id || selectedPayment.recipientId;
+                          const customer = customers.find(c => c._id === customerId);
+                          return customer?.customerName || selectedPayment.customerId?.customerName || 'Unknown Customer';
+                        })()}
                       </span>
                     </div>
                   )}
-                  
-                  {selectedPayment.carId && (
+
+                  {(selectedPayment.carId || (selectedPayment.accountType === 'car' && selectedPayment.recipientId)) && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Car:</span>
                       <span className="font-medium">
-                        {cars.find(c => c._id === selectedPayment.carId)?.carName || 'Unknown Car'}
+                        {(() => {
+                          const carId = selectedPayment.carId?._id || selectedPayment.carId || selectedPayment.recipientId?._id || selectedPayment.recipientId;
+                          const car = cars.find(c => c._id === carId);
+                          return car?.carName || selectedPayment.carId?.carName || 'Unknown Car';
+                        })()}
                       </span>
                     </div>
                   )}
