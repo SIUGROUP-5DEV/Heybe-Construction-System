@@ -537,37 +537,30 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
       `Invoice: ${transaction.invoiceNo}\n` +
       `Item: ${transaction.itemName}\n` +
       `Amount: $${transaction.total.toLocaleString()}\n\n` +
-      `This will reduce customer balance by $${transaction.total.toLocaleString()}.\n\n` +
+      `This will automatically update customer balance.\n\n` +
       `Continue?`;
 
     if (window.confirm(confirmMessage)) {
       try {
         setLoading(true);
-        
+
         // Find and delete the invoice
         const invoicesResponse = await invoicesAPI.getAll();
         const invoice = invoicesResponse.data.find(inv => inv.invoiceNo === transaction.invoiceNo);
-        
+
         if (invoice) {
-          await invoicesAPI.deleteWithBalanceUpdate(invoice._id);
-          
-          // Update customer balance (reduce by transaction amount)
-          const customerResponse = await customersAPI.getById(id);
-          const customer = customerResponse.data;
-          const newBalance = Math.max(0, (customer.balance || 0) - transaction.total);
-          
-          await customersAPI.update(id, { balance: newBalance });
-          
+          await invoicesAPI.delete(invoice._id);
+
           showSuccess(
-            'Transaction Deleted', 
-            `Transaction deleted and customer balance reduced by $${transaction.total.toLocaleString()}`
+            'Transaction Deleted',
+            `Transaction deleted and customer balance updated automatically`
           );
-          
+
           // Refresh data
           loadCustomerData();
           loadTransactions();
         }
-        
+
       } catch (error) {
         console.error('❌ Error deleting transaction:', error);
         showError('Delete Failed', 'Failed to delete transaction. Please try again.');
