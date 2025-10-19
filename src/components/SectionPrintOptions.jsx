@@ -2,9 +2,15 @@ import React from 'react';
 import { Printer, FileSpreadsheet, FileText, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
+
+
 import { format } from 'date-fns';
 import logo from '../assets/sitelogo.png';
+import blue from '../assets/blue.png'
+import cagaf from '../assets/cagaf.png'
+import yellow from '../assets/yellow.png'
+
 import { handlePrintContent, generatePrintStyles } from '../utils/printUtils';
 
 
@@ -378,7 +384,8 @@ const SectionPrintOptions = ({
                 </tr>
               </thead>
               <tbody>
-                ${data.map(row => `
+                ${sortedData.map(row => `
+
                   <tr>
                     ${printColumns.map(col => {
                       let value = row[col.accessor];
@@ -473,9 +480,21 @@ const SectionPrintOptions = ({
     handlePrintContent(htmlContent, `${title} - ${sectionName}`);
   };
 
+// Helper function to sort data by date
+const sortDataByDate = (data) => {
+  return [...data].sort((a, b) => {
+    const dateA = new Date(a.date || a.invoiceDate || a.paymentDate || 0);
+    const dateB = new Date(b.date || b.invoiceDate || b.paymentDate || 0);
+    return dateA - dateB; // ascending order
+  });
+};
+
+
   const handleSectionExcel = () => {
     try {
       const balanceSummary = calculateBalanceSummary();
+const sortedData = sortDataByDate(data);
+
       
       // Filter out Actions and Profit columns for Excel
       const excelColumns = columns.filter(col => 
@@ -582,132 +601,213 @@ const SectionPrintOptions = ({
     }
   };
 
-  const handleSectionPDF = () => {
-    try {
-      const balanceSummary = calculateBalanceSummary();
-      
-      // Filter out Actions and Profit columns for PDF
-      const pdfColumns = columns.filter(col => 
-        !col.header.toLowerCase().includes('action') && 
+const handleSectionPDF = () => {
+  try {
+    const balanceSummary = calculateBalanceSummary();
+    const pdfColumns = columns.filter(
+      col =>
+        !col.header.toLowerCase().includes('action') &&
         !col.header.toLowerCase().includes('profit')
-      );
-      
-      const doc = new jsPDF('l', 'mm', 'a4');
-      
-      // Add company header and get Y position
-      const startY = addCompanyHeader(doc, title, dateRange);
-      
-      // Add section title
-      doc.setFontSize(16);
-      doc.setTextColor(30, 64, 175);
-      doc.text(`${sectionName} (${data.length} records)`, 20, startY);
+    );
 
-      let yPosition = startY + 15;
+    const doc = new jsPDF('p', 'pt', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 40;
 
-      // Add profile information if available
-      if (profileData) {
-        doc.setFontSize(14);
-        doc.setTextColor(0, 0, 0);
-        doc.text('Profile Information', 20, yPosition);
-        yPosition += 10;
+    // ✅ COMPANY PROFILE SECTION (flex layout with logo + 3 images)
+    const logoImg = new Image();
+    logoImg.src = logo;
 
-        Object.entries(profileData).forEach(([key, value]) => {
-          doc.setFontSize(10);
-          doc.setTextColor(75, 85, 99);
-          doc.text(`${key}: ${value}`, 25, yPosition);
-          yPosition += 6;
-        });
-        
-        yPosition += 10;
-      }
+ 
 
-      // Prepare table data
-      const tableColumns = pdfColumns.map(col => col.header);
-      const tableRows = data.map(row => {
-        return pdfColumns.map(col => {
-          let value = row[col.accessor];
-          
-          // Handle nested objects
-          if (col.accessor && col.accessor.includes('.')) {
-            const keys = col.accessor.split('.');
-            value = keys.reduce((obj, key) => obj?.[key], row);
-          }
-          
-          // Convert to string for PDF
-          if (typeof value === 'object' && value !== null) {
-            if (value.customerName) return value.customerName;
-            if (value.carName) return value.carName;
-            if (value.itemName) return value.itemName;
-            if (value.employeeName) return value.employeeName;
-            return JSON.stringify(value);
-          }
-          
-          // Format dates
-          if (col.accessor.includes('Date') && value) {
-            return format(new Date(value), 'MMM dd, yyyy');
-          }
-          
-          return value || '';
-        });
-      });
+    // Layout sida flex: logo bidix, 3da image midig
+    const logoWidth = 300;
+    const logoHeight = 300;
+    const iconWidth = 115;
+    const iconHeight = 115;
+    const spacing = 10;
 
-      // Add table
-      doc.autoTable({
-        head: [tableColumns],
-        body: tableRows,
-        startY: yPosition,
-        styles: {
-          fontSize: 9,
-          cellPadding: 4,
-        },
-        headStyles: {
-          fillColor: [37, 99, 235],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold'
-        },
-        alternateRowStyles: {
-          fillColor: [248, 250, 252]
-        },
-        margin: { left: 20, right: 20 }
-      });
-      
-      // Add balance summary box
-      const finalY = doc.lastAutoTable.finalY + 15;
-      
-      // Draw balance summary box
-      doc.setFillColor(239, 246, 255); // Light blue background
-      doc.rect(doc.internal.pageSize.width - 80, finalY, 60, 35, 'F');
-      doc.setDrawColor(37, 99, 235); // Blue border
-      doc.rect(doc.internal.pageSize.width - 80, finalY, 60, 35, 'S');
-      
-      // Add balance summary text
+    // Logo
+    doc.addImage(logoImg, 'PNG', -28, y-120, logoWidth, logoHeight);
+
+    // 3da image midig la saf ah
+    const startXRight = pageWidth - (iconWidth * 3+ spacing * -1 + 40);
+    doc.addImage(blue, 'PNG', startXRight , y-10, iconWidth, iconHeight);
+    doc.addImage(cagaf, 'PNG', startXRight + iconWidth + spacing, y-10, iconWidth, iconHeight);
+    doc.addImage(yellow, 'PNG', startXRight + (iconWidth + spacing) * 2, y-10, iconWidth, iconHeight);
+
+    
+
+    // Title
+    y += 85;
+    doc.setFontSize(18);
+    doc.setTextColor(0, 0, 0);
+    doc.text(title || 'Report', 40, y);
+
+    // Date Range
+    if (dateRange) {
+      y += 20;
       doc.setFontSize(10);
-      doc.setTextColor(30, 64, 175);
-      doc.text('Balance Summary', doc.internal.pageSize.width - 50, finalY + 8, { align: 'center' });
-      
-      doc.setFontSize(8);
-      doc.setTextColor(0, 0, 0);
-      doc.text(`Total Amount: $${balanceSummary.totalAmount.toLocaleString()}`, doc.internal.pageSize.width - 75, finalY + 15);
-      doc.text(`Total MKPYN Payments: $${balanceSummary.totalPayments.toLocaleString()}`, doc.internal.pageSize.width - 75, finalY + 22);
-      
-      doc.setFontSize(9);
-      doc.setTextColor(30, 64, 175);
-      doc.text(`Final Balance: $${balanceSummary.finalBalance.toLocaleString()}`, doc.internal.pageSize.width - 75, finalY + 30);
-
-      // Generate filename
-      const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm');
-      const dateRangeStr = dateRange ? 
-        `_${format(dateRange.from, 'MMM-dd')}_to_${format(dateRange.to, 'MMM-dd')}` : '';
-      const filename = `${sectionName}_${timestamp}${dateRangeStr}.pdf`;
-
-      doc.save(filename);
-      
-      console.log('✅ Section PDF exported:', filename);
-    } catch (error) {
-      console.error('❌ PDF export error:', error);
-      alert('Error exporting to PDF. Please try again.');
+      doc.setTextColor(90, 90, 90);
+      doc.text(
+        `Report Period: ${format(dateRange.from, 'MMM dd, yyyy')} - ${format(
+          dateRange.to,
+          'MMM dd, yyyy'
+        )}`,
+        40,
+        y
+      );
     }
-  };
+
+    // Generated Date
+    doc.setFontSize(9);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`Generated on: ${format(new Date(), 'MMM dd, yyyy')}`, 40, y + 15);
+
+    // ✅ PROFILE INFORMATION BOX (same as print)
+    if (profileData) {
+      y += 35;
+      doc.setDrawColor(189, 219, 254);
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(40, y, pageWidth - 80, 100, 8, 8, 'FD');
+
+      doc.setFontSize(14);
+      doc.setTextColor(30, 64, 175);
+      doc.text('Profile Information', 50, y + 20);
+
+      const entries = Object.entries(profileData);
+      const colCount = 3;
+      const colWidth = (pageWidth - 120) / colCount;
+      let rowY = y + 40;
+      let colX = 50;
+
+      entries.forEach(([key, value], i) => {
+        doc.setFontSize(9);
+        doc.setTextColor(107, 114, 128);
+        doc.text(key, colX, rowY);
+        doc.setFontSize(11);
+        doc.setTextColor(31, 41, 55);
+        doc.text(String(value), colX, rowY + 12);
+
+        if ((i + 1) % colCount === 0) {
+          rowY += 35;
+          colX = 50;
+        } else {
+          colX += colWidth;
+        }
+      });
+
+      y += 120;
+    }
+
+    // ✅ TABLE SECTION
+    const tableColumns = pdfColumns.map(col => col.header);
+   const sortedData = sortDataByDate(data);
+const tableRows = sortedData.map(row => 
+
+      pdfColumns.map(col => {
+        let value = col.accessor ? row[col.accessor] : '';
+        if (typeof value === 'object' && value !== null) {
+          if (value.customerName) value = value.customerName;
+          else if (value.carName) value = value.carName;
+          else if (value.itemName) value = value.itemName;
+          else if (value.employeeName) value = value.employeeName;
+        }
+        if (
+          value &&
+          !isNaN(Date.parse(value)) &&
+          (col.accessor?.includes('date') ||
+            col.header.toLowerCase().includes('date'))
+        ) {
+          value = format(new Date(value), 'MMM dd, yyyy');
+        }
+        return value || '';
+      })
+    );
+
+    autoTable(doc, {
+      startY: y,
+      head: [tableColumns],
+      body: tableRows,
+      theme: 'grid',
+      styles: {
+        fontSize: 9,
+        cellPadding: 5,
+        lineColor: [210, 210, 210],
+        lineWidth: 0.2,
+      },
+      headStyles: {
+        fillColor: [37, 99, 235],
+        textColor: 255,
+        fontStyle: 'bold',
+      },
+      alternateRowStyles: { fillColor: [245, 248, 255] },
+      margin: { left: 40, right: 40 },
+      tableWidth: 'auto',
+    });
+// ✅ BALANCE SUMMARY (print-style design)
+const finalY = doc.lastAutoTable.finalY + 25;
+
+// background gradient effect (manual rectangle + fill)
+doc.setDrawColor(37, 99, 235);
+doc.setFillColor(239, 246, 255); // light blue tone
+doc.roundedRect(pageWidth - 260, finalY, 200, 115, 10, 10, 'FD');
+
+// header line
+doc.setFillColor(37, 99, 235);
+doc.rect(pageWidth - 260, finalY, 200, 28, 'F');
+
+// title
+doc.setFontSize(13);
+doc.setTextColor(255, 255, 255);
+doc.text('Balance Summary', pageWidth - 160, finalY + 18, { align: 'center' });
+
+// box inner details
+doc.setFontSize(10);
+doc.setTextColor(55, 65, 81);
+doc.text(`Total Amount:`, pageWidth - 240, finalY + 50);
+doc.text(`Total MKPYN Payments:`, pageWidth - 240, finalY + 70);
+doc.text(`Final Balance:`, pageWidth - 240, finalY + 90);
+
+// values (align right)
+doc.setFontSize(11);
+doc.setTextColor(22, 101, 52); // green
+doc.text(`$${balanceSummary.totalAmount.toLocaleString()}`, pageWidth - 100, finalY + 50, { align: 'right' });
+
+doc.setTextColor(220, 38, 38); // red
+doc.text(`$${balanceSummary.totalPayments.toLocaleString()}`, pageWidth - 100, finalY + 70, { align: 'right' });
+
+doc.setFontSize(12);
+doc.setTextColor(30, 64, 175); // blue
+doc.text(`$${balanceSummary.finalBalance.toLocaleString()}`, pageWidth - 100, finalY + 90, { align: 'right' });
+
+
+    // ✅ Footer
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text(
+      '© Haype Construction | Business Management System',
+      40,
+      doc.internal.pageSize.getHeight() - 25
+    );
+
+    const filename = `${sectionName}_${format(
+      new Date(),
+      'yyyy-MM-dd_HH-mm'
+    )}.pdf`;
+    doc.save(filename);
+
+    console.log('✅ PDF Exported with Flex Header Design');
+  } catch (error) {
+    console.error('❌ PDF export error:', error);
+    alert('Error exporting to PDF. Please try again.');
+  }
+};
+
+
+
+
+
 
   return (
     <div className={`flex items-center space-x-2 ${className}`}>
