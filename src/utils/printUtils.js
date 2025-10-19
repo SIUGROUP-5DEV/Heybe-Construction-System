@@ -3,56 +3,109 @@ export const isMobileDevice = () => {
 };
 
 export const handlePrintContent = (htmlContent, title = 'Print') => {
-  // Try popup window first (works on most devices)
-  const printWindow = window.open('', '_blank', 'width=800,height=600');
+  const isMobile = isMobileDevice();
 
-  if (printWindow) {
-    // Desktop and most mobile browsers
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
+  if (isMobile) {
+    // Mobile-specific handling
+    // Create a temporary container for mobile printing
+    const printContainer = document.createElement('div');
+    printContainer.id = 'mobile-print-container';
+    printContainer.style.position = 'fixed';
+    printContainer.style.top = '0';
+    printContainer.style.left = '0';
+    printContainer.style.width = '100%';
+    printContainer.style.height = '100%';
+    printContainer.style.backgroundColor = 'white';
+    printContainer.style.zIndex = '99999';
+    printContainer.style.overflow = 'auto';
+    printContainer.innerHTML = htmlContent;
 
-    // Wait for images and content to load
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
+    // Add close button for mobile
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '✕ Close';
+    closeBtn.style.position = 'fixed';
+    closeBtn.style.top = '10px';
+    closeBtn.style.right = '10px';
+    closeBtn.style.padding = '10px 20px';
+    closeBtn.style.backgroundColor = '#ef4444';
+    closeBtn.style.color = 'white';
+    closeBtn.style.border = 'none';
+    closeBtn.style.borderRadius = '8px';
+    closeBtn.style.fontSize = '16px';
+    closeBtn.style.fontWeight = 'bold';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.zIndex = '100000';
+    closeBtn.className = 'no-print';
 
-        // Close after print dialog is dismissed (give user time)
-        setTimeout(() => {
-          printWindow.close();
-        }, 100);
-      }, 500);
+    closeBtn.onclick = () => {
+      document.body.removeChild(printContainer);
     };
+
+    printContainer.appendChild(closeBtn);
+    document.body.appendChild(printContainer);
+
+    // Wait a bit then trigger print
+    setTimeout(() => {
+      window.print();
+    }, 300);
+
+    // Listen for when print dialog closes
+    const afterPrint = () => {
+      if (document.body.contains(printContainer)) {
+        document.body.removeChild(printContainer);
+      }
+      window.removeEventListener('afterprint', afterPrint);
+    };
+    window.addEventListener('afterprint', afterPrint);
+
   } else {
-    // Fallback for browsers that block popups
-    // Create iframe for printing
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = 'none';
+    // Desktop handling
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
 
-    document.body.appendChild(iframe);
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
 
-    const iframeDoc = iframe.contentWindow.document;
-    iframeDoc.open();
-    iframeDoc.write(htmlContent);
-    iframeDoc.close();
-
-    // Wait for content to load
-    iframe.onload = () => {
-      setTimeout(() => {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-
-        // Remove iframe after print
+      // Wait for images and content to load
+      printWindow.onload = () => {
         setTimeout(() => {
-          document.body.removeChild(iframe);
-        }, 1000);
-      }, 500);
-    };
+          printWindow.focus();
+          printWindow.print();
+
+          // Close after print dialog is dismissed
+          setTimeout(() => {
+            printWindow.close();
+          }, 100);
+        }, 500);
+      };
+    } else {
+      // Fallback: use iframe method
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = 'none';
+
+      document.body.appendChild(iframe);
+
+      const iframeDoc = iframe.contentWindow.document;
+      iframeDoc.open();
+      iframeDoc.write(htmlContent);
+      iframeDoc.close();
+
+      iframe.onload = () => {
+        setTimeout(() => {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+          }, 1000);
+        }, 500);
+      };
+    }
   }
 };
 

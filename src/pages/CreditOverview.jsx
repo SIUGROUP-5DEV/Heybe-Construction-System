@@ -4,10 +4,12 @@ import { ArrowLeft, CreditCard, Phone, User, Eye, Printer, Search } from 'lucide
 import Button from '../components/Button';
 import Table from '../components/Table';
 import SearchInput from '../components/SearchInput';
-import { customersAPI } from '../services/api';
+import DateFilter from '../components/DateFilter';
+import SectionPrintOptions from '../components/SectionPrintOptions';
+import { customersAPI, invoicesAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
 
 const CreditOverview = () => {
@@ -16,11 +18,16 @@ const CreditOverview = () => {
   const { showError } = useToast();
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState([]);
-  const [dateRange, setDateRange] = useState(null);
+  const [allInvoices, setAllInvoices] = useState([]);
+  const [dateRange, setDateRange] = useState({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date())
+  });
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     loadCreditCustomers();
+    loadInvoices();
   }, []);
 
   const loadCreditCustomers = async () => {
@@ -29,10 +36,6 @@ const CreditOverview = () => {
       const response = await customersAPI.getAll();
       const customersWithCredit = response.data.filter(c => (c.balance || 0) > 0);
       setCustomers(customersWithCredit);
-
-      if (location.state?.dateRange) {
-        setDateRange(location.state.dateRange);
-      }
 
       console.log('✅ Credit customers loaded:', customersWithCredit.length);
     } catch (error) {
@@ -43,23 +46,56 @@ const CreditOverview = () => {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
+  const loadInvoices = async () => {
+    try {
+      const response = await invoicesAPI.getAll();
+      setAllInvoices(response.data);
+      console.log('✅ Invoices loaded for date filtering:', response.data.length);
+    } catch (error) {
+      console.error('❌ Error loading invoices:', error);
+    }
   };
 
   const handleViewCustomer = (customerId) => {
     navigate(`/customers/${customerId}`);
   };
 
-  // Filter customers based on search term
+  // Calculate customer balances based on filtered date range
+  const calculateFilteredBalance = (customerId) => {
+    let totalCredited = 0;
+
+    // Get credit transactions within date range
+    allInvoices.forEach(invoice => {
+      const invoiceDate = new Date(invoice.invoiceDate);
+      if (invoiceDate >= dateRange.from && invoiceDate <= dateRange.to) {
+        invoice.items?.forEach(item => {
+          const itemCustomerId = item.customerId?._id?.toString() || item.customerId?.toString();
+          if (itemCustomerId === customerId.toString() && item.paymentMethod === 'credit') {
+            totalCredited += item.total || 0;
+          }
+        });
+      }
+    });
+
+    return totalCredited;
+  };
+
+  // Filter customers based on search term and date range
   const filteredCustomers = customers.filter(customer => {
     const matchesSearch =
       customer.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.phoneNumber?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
-  });
 
-  const totalBalance = filteredCustomers.reduce((sum, customer) => sum + (customer.balance || 0), 0);
+    // Include customer if they have credit transactions in the date range
+    const hasTransactionsInRange = calculateFilteredBalance(customer._id) > 0;
+
+    return matchesSearch && hasTransactionsInRange;
+  }).map(customer => ({
+    ...customer,
+    filteredBalance: calculateFilteredBalance(customer._id)
+  }));
+
+  const totalBalance = filteredCustomers.reduce((sum, customer) => sum + (customer.filteredBalance || 0), 0);
 
   const columns = [
     {
@@ -83,8 +119,8 @@ const CreditOverview = () => {
       )
     },
     {
-      header: 'Final Balance Owed',
-      accessor: 'balance',
+      header: 'Credit Balance (Filtered)',
+      accessor: 'filteredBalance',
       render: (value) => (
         <span className="font-bold text-red-600 text-lg">
           ${(value || 0).toLocaleString()}
@@ -131,23 +167,21 @@ const CreditOverview = () => {
             <p className="text-gray-600">Customers with outstanding balances</p>
           </div>
         </div>
-        <Button onClick={handlePrint} variant="outline">
-          <Printer className="w-5 h-5 mr-2" />
-          Print Report
-        </Button>
       </div>
 
-      {/* Print Header */}
-      <div className="hidden print:block">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-black">Haype Construction</h1>
-          <h2 className="text-xl font-semibold text-black mt-2">Credit Overview Report</h2>
-          <p className="text-black mt-2">Generated on {format(new Date(), 'MMMM dd, yyyy')}</p>
-          {dateRange && (
-            <p className="text-black mt-1">
-              Period: {format(new Date(dateRange.from), 'MMM dd, yyyy')} - {format(new Date(dateRange.to), 'MMM dd, yyyy')}
-            </p>
-          )}
+
+      {/* Date Filter */}
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 no-print">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between space-y-4 lg:space-y-0 lg:space-x-6">
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Filter by Date Range</h3>
+            <p className="text-xs text-gray-600">View credit transactions within a specific period</p>
+          </div>
+          <DateFilter
+            dateRange={dateRange}
+            onDateChange={setDateRange}
+            showApplyButton={false}
+          />
         </div>
       </div>
 
@@ -182,6 +216,20 @@ const CreditOverview = () => {
                 {filteredCustomers.length} of {customers.length} customers with outstanding balances
               </p>
             </div>
+            <div className="no-print">
+              <SectionPrintOptions
+                data={filteredCustomers}
+                columns={columns}
+                title="Credit Overview Report"
+                sectionName="Credit Customers"
+                dateRange={dateRange}
+                balanceSummary={{
+                  totalAmount: totalBalance,
+                  totalPayments: 0,
+                  finalBalance: totalBalance
+                }}
+              />
+            </div>
           </div>
           <SearchInput
             value={searchTerm}
@@ -203,11 +251,15 @@ const CreditOverview = () => {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Grand Total</h3>
-            <p className="text-gray-600">Sum of all outstanding balances</p>
+            <p className="text-gray-600">Sum of all outstanding balances (filtered period)</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {format(dateRange.from, 'MMM dd, yyyy')} - {format(dateRange.to, 'MMM dd, yyyy')}
+            </p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-600">Total Balance</p>
+            <p className="text-sm text-gray-600">Total Credit Balance</p>
             <p className="text-4xl font-bold text-red-600">${totalBalance.toLocaleString()}</p>
+            <p className="text-sm text-gray-600 mt-2">{filteredCustomers.length} customers</p>
           </div>
         </div>
       </div>

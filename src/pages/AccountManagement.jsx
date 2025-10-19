@@ -262,7 +262,7 @@ const AccountManagement = () => {
 
   // Handle Total Credit card click
   const handleTotalCreditClick = () => {
-    navigate('/credit-overview', {
+    navigate('/CreditOverview', {
       state: {
         dateRange: creditDateRange,
         customers: customers.filter(c => (c.balance || 0) > 0)

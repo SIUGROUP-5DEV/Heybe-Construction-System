@@ -962,6 +962,18 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
       // totalProfit
     });
 
+    // Recalculate balance for all customers affected by this invoice
+    const affectedCustomers = new Set();
+    items.forEach(item => {
+      if (item.customerId && item.paymentMethod === 'credit') {
+        affectedCustomers.add(item.customerId.toString());
+      }
+    });
+
+    for (const customerId of affectedCustomers) {
+      await recalculateCustomerBalance(customerId);
+    }
+
     res.json({
       success: true,
       message: 'Invoice created successfully',
@@ -996,16 +1008,40 @@ app.get('/api/invoices/:id', authenticateToken, async (req, res) => {
 
 app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
   try {
+    // Get the original invoice to track customer changes
+    const originalInvoice = await Invoice.findById(req.params.id);
+    if (!originalInvoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
     const updatedInvoice = await Invoice.findByIdAndUpdate(
       req.params.id,
       { ...req.body, updatedAt: new Date() },
       { new: true }
     );
-    
-    if (!updatedInvoice) {
-      return res.status(404).json({ error: 'Invoice not found' });
+
+    // Collect all affected customers (from both old and new data)
+    const affectedCustomers = new Set();
+
+    // Add customers from original invoice
+    originalInvoice.items?.forEach(item => {
+      if (item.customerId && item.paymentMethod === 'credit') {
+        affectedCustomers.add(item.customerId.toString());
+      }
+    });
+
+    // Add customers from updated invoice
+    updatedInvoice.items?.forEach(item => {
+      if (item.customerId && item.paymentMethod === 'credit') {
+        affectedCustomers.add(item.customerId.toString());
+      }
+    });
+
+    // Recalculate balance for all affected customers
+    for (const customerId of affectedCustomers) {
+      await recalculateCustomerBalance(customerId);
     }
-    
+
     res.json({
       success: true,
       message: 'Invoice updated successfully',
@@ -1019,12 +1055,28 @@ app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/invoices/:id', authenticateToken, async (req, res) => {
   try {
-    const deletedInvoice = await Invoice.findByIdAndDelete(req.params.id);
-    
-    if (!deletedInvoice) {
+    // Get invoice data before deletion
+    const invoiceToDelete = await Invoice.findById(req.params.id);
+    if (!invoiceToDelete) {
       return res.status(404).json({ error: 'Invoice not found' });
     }
-    
+
+    // Collect affected customers
+    const affectedCustomers = new Set();
+    invoiceToDelete.items?.forEach(item => {
+      if (item.customerId && item.paymentMethod === 'credit') {
+        affectedCustomers.add(item.customerId.toString());
+      }
+    });
+
+    // Delete the invoice
+    await Invoice.findByIdAndDelete(req.params.id);
+
+    // Recalculate balance for all affected customers
+    for (const customerId of affectedCustomers) {
+      await recalculateCustomerBalance(customerId);
+    }
+
     res.json({
       success: true,
       message: 'Invoice deleted successfully'
@@ -1060,13 +1112,8 @@ app.post('/api/payments/receive', authenticateToken, async (req, res) => {
       paymentDate
     });
 
-  
-
-    // Update customer balance
-    await Customer.findByIdAndUpdate(customerId, {
-      $inc: { balance: -amount },
-      updatedAt: new Date()
-    });
+    // Recalculate customer balance
+    await recalculateCustomerBalance(customerId);
 
     res.json({
       success: true,
@@ -1162,10 +1209,10 @@ app.put('/api/payments/:id', async (req, res) => {
       return res.status(404).json({ error: 'Payment not found' });
     }
 
-    const originalAmount = originalPayment.amount;
-    const amountDifference = amount - originalAmount;
+    const originalCustomerId = originalPayment.customerId?.toString();
+    const newCustomerId = customerId?.toString();
 
-    console.log('💰 Payment update - Original:', originalAmount, 'New:', amount, 'Difference:', amountDifference);
+    console.log('💰 Payment update - Original amount:', originalPayment.amount, 'New amount:', amount);
 
     // Update the payment
     const updatedPayment = await Payment.findByIdAndUpdate(
@@ -1184,30 +1231,27 @@ app.put('/api/payments/:id', async (req, res) => {
 
     console.log('✅ Payment updated in database:', updatedPayment);
 
-    // Update customer balance if there's a difference and it's a customer payment
-    if (amountDifference !== 0 && (customerId || originalPayment.customerId)) {
-      const targetCustomerId = customerId || originalPayment.customerId;
-      const customer = await Customer.findById(targetCustomerId);
-      
-      if (customer) {
-        if (originalPayment.type === 'receive') {
-          // For payment received: if amount increases, customer balance should decrease more
-          const newBalance = Math.max(0, (customer.balance || 0) - amountDifference);
-          customer.balance = newBalance;
-          await customer.save();
-          console.log(`💰 Customer balance adjusted: ${customer.balance + amountDifference} - ${amountDifference} = ${newBalance}`);
-        }
-      }
+    // Recalculate balance for affected customers
+    const affectedCustomers = new Set();
+    if (originalCustomerId && originalPayment.type === 'receive') {
+      affectedCustomers.add(originalCustomerId);
+    }
+    if (newCustomerId && updatedPayment.type === 'receive') {
+      affectedCustomers.add(newCustomerId);
+    }
+
+    for (const customerId of affectedCustomers) {
+      await recalculateCustomerBalance(customerId);
     }
 
     // Update car balance if there's a difference and it's a car payment
+    const amountDifference = amount - originalPayment.amount;
     if (amountDifference !== 0 && (carId || originalPayment.carId)) {
       const targetCarId = carId || originalPayment.carId;
       const car = await Car.findById(targetCarId);
-      
+
       if (car) {
         if (originalPayment.type === 'payment_out') {
-          // For payment out: if amount increases, car left should increase
           const newLeft = Math.max(0, (car.left || 0) + amountDifference);
           car.left = newLeft;
           await car.save();
@@ -1239,28 +1283,28 @@ app.delete('/api/payments/:id', async (req, res) => {
       return res.status(404).json({ error: 'Payment not found' });
     }
 
+    const customerId = payment.customerId?._id?.toString();
+    const carId = payment.carId?._id?.toString();
+
     console.log('💰 Payment to delete:', {
       type: payment.type,
       amount: payment.amount,
-      customerId: payment.customerId?._id,
-      carId: payment.carId?._id
+      customerId: customerId,
+      carId: carId
     });
 
-    // Reverse balance changes before deletion
-    if (payment.type === 'receive' && payment.customerId) {
-      // For payment received: add back to customer balance (increase debt)
-      const customer = await Customer.findById(payment.customerId._id);
-      if (customer) {
-        const newBalance = (customer.balance || 0) + payment.amount;
-        customer.balance = newBalance;
-        await customer.save();
-        console.log(`✅ Customer ${customer.customerName} balance restored: +$${payment.amount} = $${newBalance}`);
-      }
+    // Delete the payment first
+    await Payment.findByIdAndDelete(id);
+    console.log('✅ Payment deleted from database');
+
+    // Recalculate customer balance if applicable
+    if (payment.type === 'receive' && customerId) {
+      await recalculateCustomerBalance(customerId);
     }
 
-    if (payment.type === 'payment_out' && payment.carId) {
-      // For payment out: reduce car left amount
-      const car = await Car.findById(payment.carId._id);
+    // Update car balance if applicable
+    if (payment.type === 'payment_out' && carId) {
+      const car = await Car.findById(carId);
       if (car) {
         const newLeft = Math.max(0, (car.left || 0) - payment.amount);
         car.left = newLeft;
@@ -1269,10 +1313,6 @@ app.delete('/api/payments/:id', async (req, res) => {
       }
     }
 
-    // Delete the payment
-    await Payment.findByIdAndDelete(id);
-    console.log('✅ Payment deleted from database');
- 
     res.json({ success: true, message: 'Payment deleted successfully' });
   } catch (error) {
     console.error('❌ Error deleting payment:', error);
@@ -1617,6 +1657,52 @@ app.listen(PORT, () => {
   console.log(`🔐 Default login: admin@haype.com / admin123`);
   console.log(`🌐 MongoDB Atlas: Connected to Haype database`);
 });
+
+// Helper function to recalculate and update customer balance
+async function recalculateCustomerBalance(customerId) {
+  try {
+    console.log('🔄 Recalculating balance for customer:', customerId);
+
+    // Get all invoices and calculate total credit transactions
+    const invoices = await Invoice.find().populate('items.customerId');
+    let totalCredited = 0;
+
+    invoices.forEach(invoice => {
+      invoice.items?.forEach(item => {
+        const itemCustomerId = item.customerId?._id?.toString() || item.customerId?.toString();
+        if (itemCustomerId === customerId.toString() && item.paymentMethod === 'credit') {
+          totalCredited += item.total || 0;
+        }
+      });
+    });
+
+    // Get all payments for this customer
+    const payments = await Payment.find({
+      customerId: customerId,
+      type: 'receive'
+    });
+
+    const totalPayments = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+    // Calculate final balance
+    const finalBalance = Math.max(0, totalCredited - totalPayments);
+
+    console.log(`💰 Customer balance calculation: Credited=$${totalCredited}, Payments=$${totalPayments}, Final=$${finalBalance}`);
+
+    // Update customer balance in database
+    await Customer.findByIdAndUpdate(customerId, {
+      balance: finalBalance,
+      updatedAt: new Date()
+    });
+
+    console.log(`✅ Customer balance updated to $${finalBalance}`);
+
+    return finalBalance;
+  } catch (error) {
+    console.error('❌ Error recalculating customer balance:', error);
+    throw error;
+  }
+}
 
 // Graceful shutdown
 process.on('SIGINT', () => {

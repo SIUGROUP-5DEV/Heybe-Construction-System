@@ -797,7 +797,8 @@ const CarProfile = () => {
             </div>
           </div>
         </div>
-  <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center">
             <div className="p-3 bg-red-100 rounded-lg">
               <DollarSign className="w-6 h-6 text-red-600" />
@@ -805,13 +806,13 @@ const CarProfile = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Payment Left</p>
               <p className="text-2xl font-bold text-gray-900">
-               ${filteredPayments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+                ${filteredPayments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
               </p>
             </div>
           </div>
         </div>
 
-         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center">
             <div className="p-3 bg-red-100 rounded-lg">
               <DollarSign className="w-6 h-6 text-red-600" />
@@ -824,7 +825,7 @@ const CarProfile = () => {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center">
             <div className="p-3 bg-green-100 rounded-lg">
@@ -833,13 +834,17 @@ const CarProfile = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Profit</p>
               <p className="text-2xl font-bold text-gray-900">
-                ${filteredTransactions.reduce((sum, t) => sum + t.totalProfit, 0).toLocaleString()}
+                ${(() => {
+                  const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.total, 0);
+                  const totalPaymentLeft = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
+                  const amountLeft = filteredTransactions.reduce((sum, t) => sum + t.totalLeft, 0);
+                  const totalProfit = totalRevenue - totalPaymentLeft - amountLeft;
+                  return totalProfit.toLocaleString();
+                })()}
               </p>
             </div>
           </div>
         </div>
-        
-       
       </div>
 
       {/* Invoice Modal */}

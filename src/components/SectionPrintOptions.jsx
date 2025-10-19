@@ -110,11 +110,22 @@ const SectionPrintOptions = ({
       <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>${title} - ${sectionName}</title>
           <style>
-            @page { 
-              margin: 0.75in; 
-              size: A4; 
+            @page {
+              margin: 0.5in;
+              size: A4;
+            }
+            @media print {
+              .no-print {
+                display: none !important;
+              }
+              body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
             }
             body { 
               font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -184,11 +195,22 @@ const SectionPrintOptions = ({
               background: linear-gradient(to right, #f8fafc, #f1f5f9);
               border-radius: 8px;
             }
-            .profile-grid { 
-              display: flex; 
-              grid grid-cols-1 md:grid-cols-4 gap-6;
-              gap: 15px; 
-              margin-top: 10px; 
+            .profile-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+              gap: 15px;
+              margin-top: 3px;
+             
+            }
+            @media screen and (max-width: 768px) {
+              .profile-grid {
+                grid-template-columns: 1fr 1fr;
+              }
+            }
+            @media screen and (max-width: 480px) {
+              .profile-grid {
+                grid-template-columns: 1fr;
+              }
             }
             .profile-item { 
               background: white;
@@ -210,7 +232,7 @@ const SectionPrintOptions = ({
             .data-table { 
               width: 100%; 
               border-collapse: collapse; 
-              margin-top: 5px;
+              margin-top: -25px;
               background: white;
             }
             .data-table th { 
@@ -233,6 +255,24 @@ const SectionPrintOptions = ({
             .data-table tr:hover {
               background: #eff6ff;
             }
+            @media screen and (max-width: 768px) {
+              .data-table {
+                font-size: 10px;
+              }
+              .data-table th,
+              .data-table td {
+                padding: 6px 4px;
+              }
+            }
+            @media screen and (max-width: 480px) {
+              .data-table {
+                font-size: 9px;
+              }
+              .data-table th,
+              .data-table td {
+                padding: 4px 3px;
+              }
+            }
             .summary-section { 
               margin-top: 25px; 
               padding: 20px; 
@@ -240,21 +280,29 @@ const SectionPrintOptions = ({
               background: linear-gradient(to right, #eff6ff, #dbeafe);
               border-radius: 8px;
             }
-           .summary-grid { 
-.summary-grid { 
-  display: flex; 
-  flex-wrap: wrap;       /* items-ku waxay hoos ugu dhacayaan saf cusub haddii boosku ka yaraado */
-  gap: 2px; 
-  margin-top: 10px; 
-}
-
-.summary-item { 
-  flex: 1 1 150px;       /* ugu yaraan 150px, haddii boos badan jiro waxay ku fidi doonaan */
-  text-align: center; 
-  padding: 10px; 
-  border: 1px solid #ccc; 
-  background-color: white; 
-}
+            .summary-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+              gap: 15px;
+              margin-top: 10px;
+            }
+            @media screen and (max-width: 768px) {
+              .summary-grid {
+                grid-template-columns: 1fr 1fr;
+              }
+            }
+            @media screen and (max-width: 480px) {
+              .summary-grid {
+                grid-template-columns: 1fr;
+              }
+            }
+            .summary-item {
+              text-align: center;
+              padding: 15px;
+              border: 1px solid #ccc;
+              background-color: white;
+              border-radius: 6px;
+            }
 
 
             .summary-label { 
@@ -284,7 +332,7 @@ const SectionPrintOptions = ({
         <body>
           <div class="header">
           <div class="logo">
-  <img src="${logo}" alt="Company Logo" style="width:420px;height:420px; margin-top:-180px; margin-left:-70px;" />
+  <img src="${logo}" alt="Company Logo" style="width:420px;height:420px; margin-top:-170px; margin-left:-70px;" />
 </div>
             <div class="company-info">
              

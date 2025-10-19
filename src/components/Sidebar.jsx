@@ -99,7 +99,8 @@ const Sidebar = () => {
       subItems: [
         { name: 'Customer Center', path: '/customers' },
         { name: 'Customer Reports', path: '/customers/reports' },
-        { name: 'Create Customer', path: '/customers/create' }
+        { name: 'Create Customer', path: '/customers/create' },
+        { name: 'Credit-Overview', path: '/CreditOverview' }
       ]
     },
     {

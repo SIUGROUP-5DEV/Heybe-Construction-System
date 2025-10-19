@@ -27,6 +27,7 @@ import AccountManagement from './pages/AccountManagement';
 import UserCenter from './pages/UserCenter';
 import CreateUser from './pages/CreateUser';
 import ProtectedRoute from './components/ProtectedRoute';
+import CreditOverview from './pages/CreditOverview';
 
 function App() {
   return (
@@ -62,6 +63,7 @@ function App() {
                 <Route path="/customers/create" element={<CreateCustomer />} />
                 <Route path="/customers/reports" element={<CustomerReports />} />
                 <Route path="/customers/:id" element={<CustomerProfile />} />
+                <Route path="/CreditOverview" element={<CreditOverview/>} />
                 
                 {/* Invoice Routes */}
                 <Route path="/invoices" element={<InvoiceCenter />} />
