@@ -21,11 +21,13 @@ const [editPaymentData, setEditPaymentData] = useState(null);
 
   
   // Payment number state
-  const [nextPaymentNumber, setNextPaymentNumber] = useState('PYN-001');
+  const [nextMakePaymentNumber, setNextMakePaymentNumber] = useState('MKPYNO-001');
+  const [nextOutPaymentNumber, setNextOutPaymentNumber] = useState('OTPYNO-001');
   
   const [receiveFormData, setReceiveFormData] = useState({
     customerId: '',
     paymentNo: '',
+    phoneNumber: '',
     date: new Date().toISOString().split('T')[0],
     amount: '',
     description: ''
@@ -34,6 +36,7 @@ const [editPaymentData, setEditPaymentData] = useState(null);
   const [paymentOutFormData, setPaymentOutFormData] = useState({
     carId: '',
     paymentNo: '',
+    phoneNumber: '',
     date: new Date().toISOString().split('T')[0],
     amount: '',
     description: ''
@@ -93,27 +96,38 @@ const [editPaymentData, setEditPaymentData] = useState(null);
   };
 
   const generateNextPaymentNumber = () => {
-    // Find the highest payment number
-    const paymentNumbers = payments
-      .filter(payment => payment.paymentNo && payment.paymentNo.startsWith('PYN-'))
-      .map(payment => parseInt(payment.paymentNo.replace('PYN-', '')))
+    // Find the highest MKPYNO- number
+    const makePaymentNumbers = payments
+      .filter(payment => payment.paymentNo && payment.paymentNo.startsWith('MKPYNO-'))
+      .map(payment => parseInt(payment.paymentNo.replace('MKPYNO-', '')))
       .filter(num => !isNaN(num));
-    
-    const maxNumber = paymentNumbers.length > 0 ? Math.max(...paymentNumbers) : 0;
-    const nextNumber = maxNumber + 1;
-    const nextPaymentNo = `PYN-${String(nextNumber).padStart(4, '0')}`;
-    
-    setNextPaymentNumber(nextPaymentNo);
-    
-    // Set in both forms
+
+    const maxMakeNumber = makePaymentNumbers.length > 0 ? Math.max(...makePaymentNumbers) : 0;
+    const nextMakeNumber = maxMakeNumber + 1;
+    const nextMakePaymentNo = `MKPYNO-${String(nextMakeNumber).padStart(3, '0')}`;
+
+    // Find the highest OTPYNO- number
+    const outPaymentNumbers = payments
+      .filter(payment => payment.paymentNo && payment.paymentNo.startsWith('OTPYNO-'))
+      .map(payment => parseInt(payment.paymentNo.replace('OTPYNO-', '')))
+      .filter(num => !isNaN(num));
+
+    const maxOutNumber = outPaymentNumbers.length > 0 ? Math.max(...outPaymentNumbers) : 0;
+    const nextOutNumber = maxOutNumber + 1;
+    const nextOutPaymentNo = `OTPYNO-${String(nextOutNumber).padStart(3, '0')}`;
+
+    setNextMakePaymentNumber(nextMakePaymentNo);
+    setNextOutPaymentNumber(nextOutPaymentNo);
+
+    // Set in forms
     setReceiveFormData(prev => ({
       ...prev,
-      paymentNo: nextPaymentNo
+      paymentNo: nextMakePaymentNo
     }));
-    
+
     setPaymentOutFormData(prev => ({
       ...prev,
-      paymentNo: nextPaymentNo
+      paymentNo: nextOutPaymentNo
     }));
   };
 
@@ -150,7 +164,18 @@ const [editPaymentData, setEditPaymentData] = useState(null);
   };
 
   const handleReceiveChange = (e) => {
-    const { name, value } = e.target;
+    let { name, value } = e.target;
+
+    // Phone number validation - must start with +1
+    if (name === 'phoneNumber' && value && !value.startsWith('+1')) {
+      value = '+1' + value.replace(/^\+?1?/, '');
+    }
+
+    // Payment number validation - must start with MKPYNO-
+    if (name === 'paymentNo' && value && !value.startsWith('MKPYNO-')) {
+      value = 'MKPYNO-' + value.replace(/^MKPYNO-/i, '');
+    }
+
     setReceiveFormData(prev => ({
       ...prev,
       [name]: value
@@ -158,7 +183,18 @@ const [editPaymentData, setEditPaymentData] = useState(null);
   };
 
   const handlePaymentOutChange = (e) => {
-    const { name, value } = e.target;
+    let { name, value } = e.target;
+
+    // Phone number validation - must start with +1
+    if (name === 'phoneNumber' && value && !value.startsWith('+1')) {
+      value = '+1' + value.replace(/^\+?1?/, '');
+    }
+
+    // Payment number validation - must start with OTPYNO-
+    if (name === 'paymentNo' && value && !value.startsWith('OTPYNO-')) {
+      value = 'OTPYNO-' + value.replace(/^OTPYNO-/i, '');
+    }
+
     setPaymentOutFormData(prev => ({
       ...prev,
       [name]: value
@@ -203,47 +239,136 @@ const formatDateForInput = (d) => {
 
 // change handler for edit form
 const handleEditPaymentChange = (e) => {
-  const { name, value } = e.target;
+  let { name, value } = e.target;
+
+  // Payment number validation based on type
+  if (name === 'paymentNo' && value && editPaymentData) {
+    if (editPaymentData.type === 'receive' && !value.startsWith('MKPYNO-')) {
+      value = 'MKPYNO-' + value.replace(/^(MKPYNO-|OTPYNO-)/i, '');
+    } else if (editPaymentData.type === 'out' && !value.startsWith('OTPYNO-')) {
+      value = 'OTPYNO-' + value.replace(/^(MKPYNO-|OTPYNO-)/i, '');
+    }
+  }
+
   setEditPaymentData(prev => ({
     ...prev,
     [name]: value
   }));
 };
 
-// submit update
+// ✅ EDIT PAYMENT SUBMIT (UPDATED)
 const handleEditPaymentSubmit = async (e) => {
   e.preventDefault();
   if (!editPaymentData) return;
+
+  // Validate payment number prefix
+  if (editPaymentData.paymentNo) {
+    if (
+      editPaymentData.type === 'receive' &&
+      !editPaymentData.paymentNo.startsWith('MKPYNO-')
+    ) {
+      showError('Validation Error', 'Make payment number must start with MKPYNO-');
+      return;
+    }
+    if (
+      editPaymentData.type === 'out' &&
+      !editPaymentData.paymentNo.startsWith('OTPYNO-')
+    ) {
+      showError('Validation Error', 'Out payment number must start with OTPYNO-');
+      return;
+    }
+  }
+
   setLoading(true);
 
   try {
-    // prepare payload matching your backend
+    // Get original amount for logging/debug
+    const originalAmount =
+      payments.find((p) => p._id === editPaymentData._id)?.amount || 0;
+
+    // Extract customer or car ID
+    let customerId = null;
+    let carId = null;
+
+    if (editPaymentData.type === 'receive') {
+      if (
+        typeof editPaymentData.recipientId === 'object' &&
+        editPaymentData.recipientId?._id
+      ) {
+        customerId = editPaymentData.recipientId._id;
+      } else {
+        customerId =
+          editPaymentData.recipientId ||
+          editPaymentData.customerId?._id ||
+          editPaymentData.customerId;
+      }
+    } else if (editPaymentData.type === 'out') {
+      if (
+        typeof editPaymentData.recipientId === 'object' &&
+        editPaymentData.recipientId?._id
+      ) {
+        carId = editPaymentData.recipientId._id;
+      } else {
+        carId =
+          editPaymentData.recipientId ||
+          editPaymentData.carId?._id ||
+          editPaymentData.carId;
+      }
+    }
+
+    // Payload for API
     const payload = {
-      accountType: editPaymentData.accountType,
-      recipientId: editPaymentData.recipientId,
       paymentNo: editPaymentData.paymentNo,
       amount: parseFloat(editPaymentData.amount || 0),
       description: editPaymentData.description,
-      paymentDate: editPaymentData.paymentDate
+      paymentDate: editPaymentData.paymentDate,
+      type: editPaymentData.type,
     };
 
-    // Only include accountMonth if it exists (for backwards compatibility)
-    if (editPaymentData.accountMonth) {
-      payload.accountMonth = editPaymentData.accountMonth;
+    console.log('🚀 Submitting payment update:', {
+      id: editPaymentData._id,
+      type: editPaymentData.type,
+      customerId,
+      carId,
+      payload,
+    });
+
+    // ✅ Use separate API endpoints based on type
+    if (editPaymentData.type === 'receive') {
+      await paymentsAPI.updateReceivePayment(editPaymentData._id, {
+        ...payload,
+        customerId,
+      });
+    } else if (editPaymentData.type === 'out') {
+      await paymentsAPI.updatePaymentOut(editPaymentData._id, {
+        ...payload,
+        carId,
+      });
     }
 
-    await paymentsAPI.update(editPaymentData._id, payload);
-    showSuccess('Payment Updated', `Payment ${editPaymentData.paymentNo} updated`);
+    // ✅ Success message
+    showSuccess(
+      'Payment Updated',
+      `Payment ${editPaymentData.paymentNo} updated successfully`
+    );
+
+    // Close modal and refresh data
     setShowEditPaymentModal(false);
     setEditPaymentData(null);
     loadAllData();
   } catch (error) {
     console.error('❌ Error updating payment:', error);
-    showError('Update Failed', error.response?.data?.error || 'Error updating payment');
+    showError(
+      'Update Failed',
+      error.response?.data?.error || 'Error updating payment'
+    );
   } finally {
     setLoading(false);
   }
 };
+
+
+
 
 // delete payment handler
 const handleDeletePayment = async (payment) => {
@@ -294,6 +419,14 @@ const handleDeletePayment = async (payment) => {
       showError('Validation Error', 'Please enter a valid amount');
       return false;
     }
+    if (receiveFormData.phoneNumber && !receiveFormData.phoneNumber.startsWith('+1')) {
+      showError('Validation Error', 'Phone number must start with +1');
+      return false;
+    }
+    if (receiveFormData.paymentNo && !receiveFormData.paymentNo.startsWith('MKPYNO-')) {
+      showError('Validation Error', 'Payment number must start with MKPYNO-');
+      return false;
+    }
     return true;
   };
 
@@ -304,6 +437,14 @@ const handleDeletePayment = async (payment) => {
     }
     if (!paymentOutFormData.amount || parseFloat(paymentOutFormData.amount) <= 0) {
       showError('Validation Error', 'Please enter a valid amount');
+      return false;
+    }
+    if (paymentOutFormData.phoneNumber && !paymentOutFormData.phoneNumber.startsWith('+1')) {
+      showError('Validation Error', 'Phone number must start with +1');
+      return false;
+    }
+    if (paymentOutFormData.paymentNo && !paymentOutFormData.paymentNo.startsWith('OTPYNO-')) {
+      showError('Validation Error', 'Payment number must start with OTPYNO-');
       return false;
     }
     return true;
@@ -336,16 +477,17 @@ const handleDeletePayment = async (payment) => {
       );
       
       setShowReceiveModal(false);
-      
+
       // Generate next payment number
-      const nextNum = parseInt(nextPaymentNumber.replace('PYN-', '')) + 1;
-      const newPaymentNo = `PYN-${String(nextNum).padStart(4, '0')}`;
-      setNextPaymentNumber(newPaymentNo);
-      
+      const nextNum = parseInt(nextMakePaymentNumber.replace('MKPYNO-', '')) + 1;
+      const newPaymentNo = `MKPYNO-${String(nextNum).padStart(3, '0')}`;
+      setNextMakePaymentNumber(newPaymentNo);
+
       // Reset form with new payment number
       setReceiveFormData({
         customerId: '',
         paymentNo: newPaymentNo,
+        phoneNumber: '',
         date: new Date().toISOString().split('T')[0],
         amount: '',
         description: ''
@@ -400,14 +542,15 @@ const handleDeletePayment = async (payment) => {
       setShowPaymentOutModal(false);
 
       // Generate next payment number
-      const nextNum = parseInt(nextPaymentNumber.replace('PYN-', '')) + 1;
-      const newPaymentNo = `PYN-${String(nextNum).padStart(4, '0')}`;
-      setNextPaymentNumber(newPaymentNo);
+      const nextNum = parseInt(nextOutPaymentNumber.replace('OTPYNO-', '')) + 1;
+      const newPaymentNo = `OTPYNO-${String(nextNum).padStart(3, '0')}`;
+      setNextOutPaymentNumber(newPaymentNo);
 
       // Reset form with new payment number
       setPaymentOutFormData({
         carId: '',
         paymentNo: newPaymentNo,
+        phoneNumber: '',
         date: new Date().toISOString().split('T')[0],
         amount: '',
         description: ''
@@ -525,7 +668,8 @@ const handleDeletePayment = async (payment) => {
             </div>
           ) : (
             <div className="space-y-4">
-              {payments.slice(0, 10).map((payment) => (
+           {payments.map((payment) => (
+
                 <div key={payment._id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                   <div className="flex items-center">
                     <div className={`p-2 rounded-lg mr-3 ${
@@ -626,12 +770,19 @@ const handleDeletePayment = async (payment) => {
               />
 
               <FormInput
-                label="Payment Number"
+                label="Payment Number (Optional)"
                 name="paymentNo"
                 value={receiveFormData.paymentNo}
                 onChange={handleReceiveChange}
-                placeholder="e.g., PYN-001"
-                enabled
+                placeholder="e.g., MKPYNO-001"
+              />
+
+              <FormInput
+                label="Phone Number (Optional)"
+                name="phoneNumber"
+                value={receiveFormData.phoneNumber}
+                onChange={handleReceiveChange}
+                placeholder="+1234567890"
               />
 
               <FormInput
@@ -715,12 +866,19 @@ const handleDeletePayment = async (payment) => {
               />
 
               <FormInput
-                label="Payment Number"
+                label="Payment Number (Optional)"
                 name="paymentNo"
                 value={paymentOutFormData.paymentNo}
                 onChange={handlePaymentOutChange}
-                placeholder="e.g., PYN-001"
-                enabled
+                placeholder="e.g., OTPYNO-001"
+              />
+
+              <FormInput
+                label="Phone Number (Optional)"
+                name="phoneNumber"
+                value={paymentOutFormData.phoneNumber}
+                onChange={handlePaymentOutChange}
+                placeholder="+1234567890"
               />
 
               <FormInput
@@ -927,7 +1085,14 @@ const handleDeletePayment = async (payment) => {
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Edit Payment</h3>
-          <Button variant="outline" size="sm" onClick={() => { setShowEditPaymentModal(false); setEditPaymentData(null); }}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setShowEditPaymentModal(false);
+              setEditPaymentData(null);
+            }}
+          >
             Close
           </Button>
         </div>
@@ -935,11 +1100,11 @@ const handleDeletePayment = async (payment) => {
 
       <form onSubmit={handleEditPaymentSubmit} className="p-6 space-y-4">
         <FormInput
-          label="Payment Number"
+          label="Payment Number (Optional)"
           name="paymentNo"
           value={editPaymentData.paymentNo || ''}
           onChange={handleEditPaymentChange}
-          required
+          placeholder={editPaymentData.type === 'receive' ? 'MKPYNO-001' : 'OTPYNO-001'}
         />
 
         <FormInput
@@ -951,70 +1116,42 @@ const handleDeletePayment = async (payment) => {
           required
         />
 
-        <FormSelect
-          label="Account Type"
-          name="accountType"
-          value={editPaymentData.accountType || ''}
-          onChange={handleEditPaymentChange}
-          options={[
-            { value: '', label: 'Choose account type' },
-            { value: 'customer', label: 'Customer' },
-            { value: 'car', label: 'Car' },
-            { value: 'company', label: 'Company' }
-          ]}
-          required
-        />
-
-        {/* Conditional recipient selector: customer or car */}
-        {editPaymentData.accountType === 'customer' && (
-          <FormSelect
-            label="Select Customer"
-            name="recipientId"
-            value={editPaymentData.recipientId || ''}
-            onChange={handleEditPaymentChange}
-            options={[
-              { value: '', label: 'Choose a customer' },
-              ...customers.map(c => ({ value: c._id, label: `${c.customerName} (Balance: $${(c.balance||0).toLocaleString()})` }))
-            ]}
-            required
-          />
-        )}
-
-        {editPaymentData.accountType === 'car' && (
+        {/* ✅ Conditional select field */}
+      {editPaymentData.type === 'receive' ? (
+  <FormSelect
+    label="Select Customer"
+    name="customerId"
+    value={
+      editPaymentData.customerId?._id ||
+      editPaymentData.customerId ||
+      ''
+    }
+    onChange={handleEditPaymentChange}
+   options={[
+                  { value: '', label: 'Choose a customer' },
+                  ...customers.map(customer => ({
+                    value: customer._id,
+                    label: `${customer.customerName} (Balance: $${(customer.balance || 0).toLocaleString()})`
+                  }))
+                ]}
+    required
+  />
+) : (
           <FormSelect
             label="Select Car"
-            name="recipientId"
-            value={editPaymentData.recipientId || ''}
+            name="carId"
+            value={editPaymentData.carId?._id || editPaymentData.carId || ''}
             onChange={handleEditPaymentChange}
             options={[
               { value: '', label: 'Choose a car' },
-              ...cars.map(car => ({ value: car._id, label: `${car.carName} (Balance: $${(car.balance||0).toLocaleString()})` }))
+              ...cars.map(car => ({
+                value: car._id,
+                label: `${car.carName} (Balance: $${(car.balance || 0).toLocaleString()})`
+              }))
             ]}
             required
           />
         )}
-
-        {/* fallback: if company or none selected, allow manual recipient id */}
-        {(!editPaymentData.accountType || editPaymentData.accountType === 'company') && (
-          <FormInput
-            label="Recipient ID (manual)"
-            name="recipientId"
-            value={editPaymentData.recipientId || ''}
-            onChange={handleEditPaymentChange}
-            placeholder="Recipient identifier"
-          />
-        )}
-
-        <FormSelect
-          label="Account Month"
-          name="accountMonth"
-          value={editPaymentData.accountMonth || ''}
-          onChange={handleEditPaymentChange}
-          options={[
-            { value: '', label: 'Choose account month' },
-            ...accountMonths.map(m => ({ value: m.value, label: `${m.label} (${m.status})` }))
-          ]}
-        />
 
         <FormInput
           label="Amount"
@@ -1036,7 +1173,10 @@ const handleDeletePayment = async (payment) => {
           <Button
             type="button"
             variant="outline"
-            onClick={() => { setShowEditPaymentModal(false); setEditPaymentData(null); }}
+            onClick={() => {
+              setShowEditPaymentModal(false);
+              setEditPaymentData(null);
+            }}
             className="flex-1"
             disabled={loading}
           >
@@ -1050,6 +1190,7 @@ const handleDeletePayment = async (payment) => {
     </div>
   </div>
 )}
+
 
 
 

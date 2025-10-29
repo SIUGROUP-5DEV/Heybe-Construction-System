@@ -171,6 +171,8 @@ const BackupRestoreModal = ({ isOpen, onClose }) => {
           ID: payment._id,
           'Payment No': payment.paymentNo || '',
           'Type': payment.type,
+          'Account Type': payment.accountType || '',
+          'Recipient ID': payment.recipientId?._id || payment.recipientId || payment.customerId?._id || payment.customerId || payment.carId?._id || payment.carId || '',
           'Customer ID': payment.customerId?._id || payment.customerId || '',
           'Customer Name': payment.customerId?.customerName || '',
           'Car ID': payment.carId?._id || payment.carId || '',
@@ -403,14 +405,16 @@ const BackupRestoreModal = ({ isOpen, onClose }) => {
             const paymentsData = XLSX.utils.sheet_to_json(paymentsSheet);
             backupData.payments = paymentsData.map(payment => ({
               _id: payment.ID,
-              paymentNo: payment['Payment No'],
+              paymentNo: payment['Payment No'] || null,
               type: payment.Type,
+              accountType: payment['Account Type'] || null,
+              recipientId: payment['Recipient ID'] || payment['Customer ID'] || payment['Car ID'] || null,
               customerId: payment['Customer ID'] || null,
               carId: payment['Car ID'] || null,
               amount: parseFloat(payment.Amount) || 0,
               paymentDate: payment['Payment Date'],
-              description: payment.Description,
-              accountMonth: payment['Account Month']
+              description: payment.Description || '',
+              accountMonth: payment['Account Month'] || null
             }));
           }
           

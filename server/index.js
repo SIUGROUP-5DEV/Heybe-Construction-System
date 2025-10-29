@@ -701,45 +701,60 @@ app.put('/api/payments/:id', authenticateToken, async (req, res) => {
 app.delete('/api/payments/:id', authenticateToken, async (req, res) => {
   try {
     const paymentId = req.params.id;
+    const { amount, customerId, carId } = req.body;
 
-    // Get the payment to delete
+    console.log('🧾 Delete request data:', { paymentId, amount, customerId, carId });
+
+    // Hel payment
     const payment = await Payment.findById(paymentId);
     if (!payment) {
       return res.status(404).json({ error: 'Payment not found' });
     }
 
-    // Get the employee
-    const employee = await Employee.findById(payment.employeeId);
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found' });
+    // Haddii aad rabto in balance laga jaro/gunno customer-ka ama car-ka
+    if (customerId) {
+      const customer = await Customer.findById(customerId);
+      if (customer) {
+        let newBalance = customer.balance || 0;
+
+        if (payment.type === 'receive') {
+          newBalance -= amount;
+        } else if (payment.type === 'out') {
+          newBalance += amount;
+        }
+
+        await Customer.findByIdAndUpdate(customerId, { balance: newBalance });
+      }
     }
 
-    // Reverse the balance change
-    let newBalance = employee.balance;
-    if (payment.type === 'balance_add') {
-      // Reverse the addition
-      newBalance = Math.max(0, employee.balance - payment.amount);
-    } else if (payment.type === 'balance_deduct') {
-      // Reverse the deduction
-      newBalance = employee.balance + payment.amount;
-    }
+    if (carId) {
+      const car = await Car.findById(carId);
+      if (car) {
+        let newCarBalance = car.balance || 0;
 
-    // Update employee balance
-    await Employee.findByIdAndUpdate(employee._id, { balance: newBalance });
+        if (payment.type === 'receive') {
+          newCarBalance -= amount;
+        } else if (payment.type === 'out') {
+          newCarBalance += amount;
+        }
+
+        await Car.findByIdAndUpdate(carId, { balance: newCarBalance });
+      }
+    }
 
     // Delete the payment record
     await Payment.findByIdAndDelete(paymentId);
 
     res.json({
       success: true,
-      message: 'Payment deleted successfully',
-      newBalance: newBalance
+      message: 'Payment deleted successfully'
     });
   } catch (error) {
-    console.error('Delete payment error:', error);
+    console.error('❌ Delete payment error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 // Items Routes
 app.get('/api/items', authenticateToken, async (req, res) => {
@@ -1128,10 +1143,10 @@ app.post('/api/payments/receive', authenticateToken, async (req, res) => {
 
 app.post('/api/payments/payment-out', authenticateToken, async (req, res) => {
   try {
-    const { accountType, recipientId, accountMonth, paymentNo, amount, description, paymentDate } = req.body;
+    const {  recipientId, paymentNo, amount, description, paymentDate } = req.body;
 
-    if (!accountType || !recipientId || !amount || !paymentDate) {
-      return res.status(400).json({ error: 'Account type, recipient, amount, and payment date are required' });
+    if (!recipientId || !amount || !paymentDate) {
+      return res.status(400).json({ error: 'recipient, amount, and payment date are required' });
     }
 
     // Generate payment number if not provided
@@ -1196,76 +1211,81 @@ app.get('/api/payments', authenticateToken, async (req, res) => {
 
 
 // UPDATE PAYMENT - NEW ROUTE
-app.put('/api/payments/:id', async (req, res) => {
-  try {
+app.put('/api/payments/receive/:id', async (req, res) => {
+   try {
     const { id } = req.params;
-    const { paymentNo, amount, description, paymentDate, customerId, carId } = req.body;
+    const { paymentNo, amount, description, paymentDate, customerId } = req.body;
 
-    console.log('🔄 Updating payment:', { id, amount, customerId, carId });
-
-    // Find the original payment
     const originalPayment = await Payment.findById(id);
     if (!originalPayment) {
-      return res.status(404).json({ error: 'Payment not found' });
+      return res.status(404).json({ error: 'Receive payment not found' });
     }
 
-    const originalCustomerId = originalPayment.customerId?.toString();
-    const newCustomerId = customerId?.toString();
-
-    console.log('💰 Payment update - Original amount:', originalPayment.amount, 'New amount:', amount);
-
-    // Update the payment
+    // Update
     const updatedPayment = await Payment.findByIdAndUpdate(
       id,
-      {
-        paymentNo,
-        amount,
-        description,
-        paymentDate,
-        customerId: customerId || originalPayment.customerId,
-        carId: carId || originalPayment.carId
-      },
+      { paymentNo, amount, description, paymentDate, customerId, type: 'receive' },
       { new: true }
-    ).populate('customerId', 'customerName phoneNumber')
-     .populate('carId', 'carName numberPlate');
+    ).populate('customerId', 'customerName phoneNumber');
 
-    console.log('✅ Payment updated in database:', updatedPayment);
-
-    // Recalculate balance for affected customers
+    // ✅ Always recalc customer balance
     const affectedCustomers = new Set();
-    if (originalCustomerId && originalPayment.type === 'receive') {
-      affectedCustomers.add(originalCustomerId);
-    }
-    if (newCustomerId && updatedPayment.type === 'receive') {
-      affectedCustomers.add(newCustomerId);
+    affectedCustomers.add(originalPayment.customerId?.toString());
+    if (customerId && customerId.toString() !== originalPayment.customerId?.toString()) {
+      affectedCustomers.add(customerId.toString());
     }
 
-    for (const customerId of affectedCustomers) {
-      await recalculateCustomerBalance(customerId);
+    for (const cId of affectedCustomers) {
+      await recalculateCustomerBalance(cId);
+      console.log(`🔁 Customer balance recalculated for ${cId}`);
     }
 
-    // Update car balance if there's a difference and it's a car payment
+    res.json({ success: true, payment: updatedPayment });
+  } catch (error) {
+    console.error('❌ Error updating receive payment:', error);
+    res.status(500).json({ error: 'Failed to update receive payment' });
+  }
+});
+
+// UPDATE OUT PAYMENT
+app.put('/api/payments/payment-out/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paymentNo, amount, description, paymentDate, carId } = req.body;
+
+    const originalPayment = await Payment.findById(id);
+    if (!originalPayment) {
+      return res.status(404).json({ error: 'Out payment not found' });
+    }
+
+    const updatedPayment = await Payment.findByIdAndUpdate(
+      id,
+      { paymentNo, amount, description, paymentDate, carId, type: 'payment_out' },
+      { new: true }
+    ).populate('carId', 'carName numberPlate');
+
+    // ✅ Update car balance
     const amountDifference = amount - originalPayment.amount;
     if (amountDifference !== 0 && (carId || originalPayment.carId)) {
       const targetCarId = carId || originalPayment.carId;
       const car = await Car.findById(targetCarId);
-
       if (car) {
-        if (originalPayment.type === 'payment_out') {
-          const newLeft = Math.max(0, (car.left || 0) + amountDifference);
-          car.left = newLeft;
-          await car.save();
-          console.log(`🚗 Car left amount adjusted: ${car.left - amountDifference} + ${amountDifference} = ${newLeft}`);
-        }
+        const newLeft = Math.max(0, (car.left || 0) + amountDifference);
+        car.left = newLeft;
+        await car.save();
+        console.log(`🚗 Car left updated: ${newLeft}`);
       }
     }
 
     res.json({ success: true, payment: updatedPayment });
   } catch (error) {
-    console.error('❌ Error updating payment:', error);
-    res.status(500).json({ error: 'Failed to update payment' });
+    console.error('❌ Error updating out payment:', error);
+    res.status(500).json({ error: 'Failed to update out payment' });
   }
 });
+       
+
+
 
 // DELETE PAYMENT - NEW ROUTE
 app.delete('/api/payments/:id', async (req, res) => {

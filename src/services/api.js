@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://haype-server.onrender.com/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://heybe-construction-system.onrender.com/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -105,6 +105,8 @@ export const invoicesAPI = {
 export const paymentsAPI = {
   receive: (paymentData) => api.post('/payments/receive', paymentData),
   paymentOut: (paymentData) => api.post('/payments/payment-out', paymentData),
+ updatePaymentOut: (id, paymentData) => api.put(`/payments/payment-out/${id}`, paymentData),
+updateReceivePayment: (id, paymentData) => api.put(`/payments/receive/${id}`, paymentData),
   update: (id, paymentData) => api.put(`/payments/${id}`, paymentData),
   getAll: () => api.get('/payments'),
   delete: (id) => {
