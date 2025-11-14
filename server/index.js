@@ -1143,13 +1143,12 @@ app.post('/api/payments/receive', authenticateToken, async (req, res) => {
 
 app.post('/api/payments/payment-out', authenticateToken, async (req, res) => {
   try {
-    const {  recipientId, paymentNo, amount, description, paymentDate } = req.body;
+    const { recipientId, paymentNo, amount, description, paymentDate, accountType } = req.body;
 
     if (!recipientId || !amount || !paymentDate) {
       return res.status(400).json({ error: 'recipient, amount, and payment date are required' });
     }
 
-    // Generate payment number if not provided
     let finalPaymentNo = paymentNo;
     if (!finalPaymentNo) {
       const paymentCount = await Payment.countDocuments();
@@ -1161,20 +1160,17 @@ app.post('/api/payments/payment-out', authenticateToken, async (req, res) => {
       paymentNo: finalPaymentNo,
       amount,
       description,
-      paymentDate,
-      accountMonth: accountMonth || null
+      paymentDate
     };
 
     if (accountType === 'employee') {
       paymentData.employeeId = recipientId;
-      // Update employee balance
       await Employee.findByIdAndUpdate(recipientId, {
         $inc: { balance: -amount },
         updatedAt: new Date()
       });
     } else if (accountType === 'car') {
       paymentData.carId = recipientId;
-      // Update car balance
       await Car.findByIdAndUpdate(recipientId, {
         $inc: { balance: -amount },
         updatedAt: new Date()
@@ -1188,11 +1184,13 @@ app.post('/api/payments/payment-out', authenticateToken, async (req, res) => {
       message: 'Payment processed successfully',
       paymentId: newPayment._id
     });
+
   } catch (error) {
     console.error('Payment out error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 app.get('/api/payments', authenticateToken, async (req, res) => {
   try {
