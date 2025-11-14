@@ -1449,7 +1449,7 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 // Export all system data
 app.get('/export', async (req, res) => {
   try {
-    console.log('🔄 Starting complete system backup export...');
+    console.log('🔄 Starting complete system backup exporting...');
     
     // Get all data from database with populated references
     const [cars, employees, items, customers, invoices, payments] = await Promise.all([
