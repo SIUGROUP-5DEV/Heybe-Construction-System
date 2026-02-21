@@ -16,11 +16,15 @@ const Table = ({ data, columns, emptyMessage = 'No data available' }) => {
           <tr>
             {columns.map((column, index) => (
               <th
-                key={index}
-                className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                  column.header.toLowerCase().includes('action') ? 'print:hidden table-actions' : ''
-                }`}
-              >
+  key={index}
+  className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
+    typeof column.header === "string" &&
+    column.header.toLowerCase().includes("action")
+      ? "print:hidden table-actions"
+      : ""
+  }`}
+>
+
                 {column.header}
               </th>
             ))}
@@ -31,7 +35,9 @@ const Table = ({ data, columns, emptyMessage = 'No data available' }) => {
             <tr key={rowIndex} className="hover:bg-gray-50 transition-colors">
               {columns.map((column, colIndex) => (
                 <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-sm">
-                  {column.render 
+                  {column.cell
+                    ? column.cell(row)
+                    : column.render
                     ? column.render(row[column.accessor], row)
                     : row[column.accessor]
                   }

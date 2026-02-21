@@ -1,9 +1,12 @@
-import express from 'express';
+import dotenv from 'dotenv';
+dotenv.config();
 
+import express from 'express';
 import cors from 'cors'
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import hormuudSmsService from './hormuudSmsService.js';
 
 const app = express();
 const PORT = process.env.PORT || 5009;
@@ -116,12 +119,31 @@ const paymentSchema = new mongoose.Schema({
   customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
   employeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
   carId: { type: mongoose.Schema.Types.ObjectId, ref: 'Car' },
-  paymentNo: { type: String,  }, 
+  paymentNo: { type: String,  },
   amount: { type: Number, required: true },
   description: { type: String },
   paymentDate: { type: Date, required: true },
   accountMonth: { type: String },
   balanceAfter: { type: Number }, // Track balance after transaction
+  createdAt: { type: Date, default: Date.now }
+});
+
+const smsMessageSchema = new mongoose.Schema({
+  recipientType: { type: String, required: true, enum: ['customer', 'employee'] },
+  recipientId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  recipientName: { type: String, required: true },
+  phoneNumber: { type: String, required: true },
+  messageContent: { type: String, required: true },
+  status: { type: String, default: 'sent', enum: ['sent', 'failed'] },
+  messageId: { type: String },
+  errorMessage: { type: String },
+  sentDate: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const smsFooterTagSchema = new mongoose.Schema({
+  tagName: { type: String, required: true },
+  tagValue: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -133,6 +155,8 @@ const Item = mongoose.model('Item', itemSchema);
 const Customer = mongoose.model('Customer', customerSchema);
 const Invoice = mongoose.model('Invoice', invoiceSchema);
 const Payment = mongoose.model('Payment', paymentSchema);
+const SMSMessage = mongoose.model('SMSMessage', smsMessageSchema);
+const SMSFooterTag = mongoose.model('SMSFooterTag', smsFooterTagSchema);
 
 // Initialize only admin user
 async function initializeAdminUser() {
@@ -402,7 +426,23 @@ app.delete('/api/cars/:id', authenticateToken, async (req, res) => {
 app.get('/api/employees', authenticateToken, async (req, res) => {
   try {
     const employees = await Employee.find().sort({ createdAt: -1 });
-    res.json(employees);
+
+    // Get last payment for each employee
+    const employeesWithPayments = await Promise.all(
+      employees.map(async (employee) => {
+        const lastPayment = await Payment.findOne({
+          employeeId: employee._id
+        }).sort({ createdAt: -1 });
+
+        return {
+          ...employee.toObject(),
+          lastPaymentAmount: lastPayment ? lastPayment.amount : 0,
+          lastPaymentDate: lastPayment ? lastPayment.paymentDate : null
+        };
+      })
+    );
+
+    res.json(employeesWithPayments);
   } catch (error) {
     console.error('Get employees error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -497,15 +537,27 @@ app.post('/api/employees/:id/add-balance', authenticateToken, async (req, res) =
     const { amount, date, description } = req.body;
     const employeeId = req.params.id;
 
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+      return res.status(400).json({ error: 'Invalid employee ID' });
+    }
+
+    // Validate amount
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Valid amount is required' });
     }
 
+    // Validate date & description
     if (!date || !description) {
       return res.status(400).json({ error: 'Date and description are required' });
     }
 
-    // Get current employee
+    const paymentDate = new Date(date);
+    if (isNaN(paymentDate)) {
+      return res.status(400).json({ error: 'Invalid date format' });
+    }
+
+    // Get employee
     const employee = await Employee.findById(employeeId);
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found' });
@@ -520,18 +572,18 @@ app.post('/api/employees/:id/add-balance', authenticateToken, async (req, res) =
       updatedAt: new Date()
     });
 
-    // Generate unique payment number for balance transaction
+    // Payment number
     const paymentCount = await Payment.countDocuments();
     const paymentNo = `BAL-${String(paymentCount + 1).padStart(4, '0')}`;
 
-    // Record transaction
+    // Create payment record
     await Payment.create({
       type: 'balance_add',
-      employeeId: new mongoose.Types.ObjectId(employeeId),
+      employeeId: employee._id,
       paymentNo: paymentNo,
       amount: parseFloat(amount),
       description: description,
-      paymentDate: new Date(date),
+      paymentDate: paymentDate,
       balanceAfter: newBalance
     });
 
@@ -544,9 +596,10 @@ app.post('/api/employees/:id/add-balance', authenticateToken, async (req, res) =
     });
   } catch (error) {
     console.error('Add balance error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
+
 
 app.post('/api/employees/:id/deduct-balance', authenticateToken, async (req, res) => {
   try {
@@ -1209,15 +1262,21 @@ app.get('/api/payments', authenticateToken, async (req, res) => {
 
 
 // UPDATE PAYMENT - NEW ROUTE
-app.put('/api/payments/receive/:id', async (req, res) => {
+app.put('/api/payments/receive/:id', authenticateToken, async (req, res) => {
    try {
     const { id } = req.params;
     const { paymentNo, amount, description, paymentDate, customerId } = req.body;
 
+    console.log('📝 Updating receive payment:', id);
+    console.log('📦 Payload:', { paymentNo, amount, description, paymentDate, customerId });
+
     const originalPayment = await Payment.findById(id);
     if (!originalPayment) {
+      console.error('❌ Payment not found:', id);
       return res.status(404).json({ error: 'Receive payment not found' });
     }
+
+    console.log('📋 Original payment:', originalPayment);
 
     // Update
     const updatedPayment = await Payment.findByIdAndUpdate(
@@ -1238,49 +1297,90 @@ app.put('/api/payments/receive/:id', async (req, res) => {
       console.log(`🔁 Customer balance recalculated for ${cId}`);
     }
 
-    res.json({ success: true, payment: updatedPayment });
+    console.log('✅ Receive payment updated successfully');
+    res.json({ success: true, payment: updatedPayment, message: 'Payment updated successfully' });
   } catch (error) {
     console.error('❌ Error updating receive payment:', error);
-    res.status(500).json({ error: 'Failed to update receive payment' });
+    res.status(500).json({ success: false, error: 'Failed to update receive payment' });
   }
 });
 
 // UPDATE OUT PAYMENT
-app.put('/api/payments/payment-out/:id', async (req, res) => {
+app.put('/api/payments/payment-out/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { paymentNo, amount, description, paymentDate, carId } = req.body;
 
-    const originalPayment = await Payment.findById(id);
-    if (!originalPayment) {
-      return res.status(404).json({ error: 'Out payment not found' });
+    console.log('📝 Updating out payment:', id);
+    console.log('📦 Payload received:', { paymentNo, amount, description, paymentDate, carId });
+
+    // ❌ Validate input
+    if (!paymentNo || !amount || !description || !paymentDate) {
+      console.error('❌ Missing required fields');
+      return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
-    const updatedPayment = await Payment.findByIdAndUpdate(
-      id,
-      { paymentNo, amount, description, paymentDate, carId, type: 'payment_out' },
-      { new: true }
-    ).populate('carId', 'carName numberPlate');
+    const parsedAmount = Number(amount);
+    if (isNaN(parsedAmount)) {
+      console.error('❌ Invalid amount:', amount);
+      return res.status(400).json({ success: false, error: 'Invalid amount' });
+    }
 
-    // ✅ Update car balance
-    const amountDifference = amount - originalPayment.amount;
-    if (amountDifference !== 0 && (carId || originalPayment.carId)) {
+    // 🔍 Find original payment
+    const originalPayment = await Payment.findById(id);
+    if (!originalPayment) {
+      console.error('❌ Payment not found:', id);
+      return res.status(404).json({ success: false, error: 'Out payment not found' });
+    }
+
+    console.log('📋 Original payment:', originalPayment);
+
+    // 🛠 Update payment
+    let updatedPayment;
+    try {
+      updatedPayment = await Payment.findByIdAndUpdate(
+        id,
+        {
+          paymentNo,
+          amount: parsedAmount,
+          description,
+          paymentDate,
+          carId,
+          type: 'payment_out',
+        },
+        { new: true, runValidators: true }
+      ).populate('carId', 'carName numberPlate');
+    } catch (err) {
+      console.error('❌ MongoDB update error:', err);
+      return res.status(500).json({ success: false, error: 'MongoDB update failed' });
+    }
+
+    // ✅ Update car balance safely
+    if (originalPayment.carId || carId) {
       const targetCarId = carId || originalPayment.carId;
       const car = await Car.findById(targetCarId);
       if (car) {
-        const newLeft = Math.max(0, (car.left || 0) + amountDifference);
-        car.left = newLeft;
+        const amountDifference = parsedAmount - (originalPayment.amount || 0);
+        car.left = Math.max(0, (car.left || 0) + amountDifference);
         await car.save();
-        console.log(`🚗 Car left updated: ${newLeft}`);
+        console.log(`🚗 Car left updated: ${car.left}`);
+      } else {
+        console.warn('⚠️ Car not found, skipping balance update:', targetCarId);
       }
     }
 
-    res.json({ success: true, payment: updatedPayment });
+    console.log('✅ Out payment updated successfully');
+    res.json({
+      success: true,
+      payment: updatedPayment,
+      message: 'Payment updated successfully',
+    });
   } catch (error) {
     console.error('❌ Error updating out payment:', error);
-    res.status(500).json({ error: 'Failed to update out payment' });
+    res.status(500).json({ success: false, error: 'Failed to update out payment' });
   }
 });
+
        
 
 
@@ -1721,6 +1821,154 @@ async function recalculateCustomerBalance(customerId) {
     throw error;
   }
 }
+
+// SMS Routes
+app.get('/api/sms/footer-tags', authenticateToken, async (req, res) => {
+  try {
+    const tags = await SMSFooterTag.find().sort({ createdAt: -1 });
+    const formattedTags = tags.map(tag => ({
+      id: tag._id,
+      tag_name: tag.tagName,
+      tag_value: tag.tagValue,
+      created_at: tag.createdAt
+    }));
+    res.json(formattedTags);
+  } catch (error) {
+    console.error('❌ Error fetching footer tags:', error);
+    res.status(500).json({ error: 'Failed to fetch footer tags' });
+  }
+});
+
+app.post('/api/sms/footer-tags', authenticateToken, async (req, res) => {
+  try {
+    const { tag_name, tag_value } = req.body;
+    const newTag = await SMSFooterTag.create({
+      tagName: tag_name,
+      tagValue: tag_value
+    });
+    const formattedTag = {
+      id: newTag._id,
+      tag_name: newTag.tagName,
+      tag_value: newTag.tagValue,
+      created_at: newTag.createdAt
+    };
+    res.status(201).json(formattedTag);
+  } catch (error) {
+    console.error('❌ Error creating footer tag:', error);
+    res.status(500).json({ error: 'Failed to create footer tag' });
+  }
+});
+
+app.delete('/api/sms/footer-tags/:id', authenticateToken, async (req, res) => {
+  try {
+    await SMSFooterTag.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Tag deleted successfully' });
+  } catch (error) {
+    console.error('❌ Error deleting footer tag:', error);
+    res.status(500).json({ error: 'Failed to delete footer tag' });
+  }
+});
+
+app.get('/api/sms/messages', authenticateToken, async (req, res) => {
+  try {
+    const { type, recipient_id } = req.query;
+    let query = {};
+
+    if (type) {
+      query.recipientType = type;
+    }
+
+    if (recipient_id) {
+      query.recipientId = recipient_id;
+    }
+
+    const messages = await SMSMessage.find(query).sort({ sentDate: -1 });
+    const formattedMessages = messages.map(msg => ({
+      id: msg._id,
+      recipient_type: msg.recipientType,
+      recipient_id: msg.recipientId,
+      recipient_name: msg.recipientName,
+      phone_number: msg.phoneNumber,
+      message_content: msg.messageContent,
+      status: msg.status,
+      sent_date: msg.sentDate,
+      created_at: msg.createdAt
+    }));
+    res.json(formattedMessages);
+  } catch (error) {
+    console.error('❌ Error fetching messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+app.post('/api/sms/send', authenticateToken, async (req, res) => {
+  try {
+    const { messages } = req.body;
+
+    const smsResults = [];
+    const senderid = process.env.HORMUUD_SENDERID || 'BanadirGym';
+
+    console.log('📤 Starting to send', messages.length, 'SMS message(s)');
+    console.log('🏷️  Using Sender ID:', senderid);
+
+    for (const msg of messages) {
+      console.log(`\n📱 Sending to: ${msg.phone_number} (${msg.recipient_name})`);
+
+      const result = await hormuudSmsService.sendSms(
+        msg.phone_number,
+        msg.message_content,
+        senderid
+      );
+
+      console.log(`📊 Result for ${msg.phone_number}:`, {
+        success: result.success,
+        status: result.status,
+        messageId: result.messageId
+      });
+
+      const finalStatus = result.status || (result.success ? 'sent' : 'failed');
+
+      const messageRecord = await SMSMessage.create({
+        recipientType: msg.recipient_type,
+        recipientId: msg.recipient_id,
+        recipientName: msg.recipient_name,
+        phoneNumber: msg.phone_number,
+        messageContent: msg.message_content,
+        status: finalStatus,
+        messageId: result.messageId || null,
+        errorMessage: result.error || null
+      });
+
+      smsResults.push({
+        ...messageRecord.toObject(),
+        apiResponse: result
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    const successCount = smsResults.filter(r => r.status === 'sent').length;
+    const failedCount = smsResults.filter(r => r.status === 'failed').length;
+
+    console.log(`\n✅ SMS Sending Complete: ${successCount} sent, ${failedCount} failed\n`);
+
+    res.status(201).json({
+      success: successCount > 0,
+      message: `${successCount} message(s) sent, ${failedCount} failed`,
+      count: smsResults.length,
+      successCount: successCount,
+      failedCount: failedCount,
+      results: smsResults
+    });
+  } catch (error) {
+    console.error('❌ Error sending messages:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send messages',
+      details: error.message
+    });
+  }
+});
 
 // Graceful shutdown
 process.on('SIGINT', () => {
