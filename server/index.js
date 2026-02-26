@@ -1267,7 +1267,7 @@ app.put('/api/payments/receive/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { paymentNo, amount, description, paymentDate, customerId } = req.body;
 
-    console.log('📝 Updating receive payment:', id);
+    console.log('📝 Updating receive/lacagqabasho payment:', id);
     console.log('📦 Payload:', { paymentNo, amount, description, paymentDate, customerId });
 
     const originalPayment = await Payment.findById(id);

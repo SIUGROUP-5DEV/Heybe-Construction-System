@@ -135,7 +135,7 @@ updateReceivePayment: (id, paymentData) => api.put(`/payments/receive/${id}`, pa
       const customerResponse = await customersAPI.getById(customerId);
       const customer = customerResponse.data;
       
-      // For payment received: if amount increases, customer balance should decrease more
+      
       // For payment out: if amount increases, customer balance should increase less
       const newBalance = Math.max(0, (customer.balance || 0) - amountDifference);
       console.log(`💰 Customer balance update: ${customer.balance} - ${amountDifference} = ${newBalance}`);
